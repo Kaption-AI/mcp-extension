@@ -10,7 +10,7 @@ Claude / Cursor ──stdio──> mcp-whatsapp ──ws://localhost:7865──>
 
 ### 1. Install the extension
 
-Install the [KaptionAI Chrome Extension](https://kaptionai.com) and enable the MCP bridge in settings.
+Install the [KaptionAI Chrome Extension](https://kaptionai.com/extension) and enable the MCP bridge in settings.
 
 ### 2. Configure your AI tool
 
@@ -190,10 +190,12 @@ query { entity: "session" }
 | `query` | string | Search text (names, messages, transcriptions) |
 | `id` | string | Look up a specific conversation, contact, or label |
 | `entity` | string | `conversations`, `contacts`, `messages`, `transcriptions`, `labels`, `communities`, `session` |
-| `limit` | number | Max results (default 25, max 200) |
+| `limit` | number | Max results (default 25, max 5000) |
 | `unread` | boolean | Only unread conversations |
 | `label` | string | Filter by label name or ID |
 | `community` | string | Filter by community name or ID |
+| `before` | string | Messages before this ISO 8601 timestamp (pagination) |
+| `after` | string | Messages after this ISO 8601 timestamp (incremental sync) |
 
 ### `summarize_conversation`
 
@@ -214,6 +216,17 @@ Manage WhatsApp Business labels — add, remove, create, or delete labels.
 | `label_id` | string | Label ID (alternative to name) |
 | `conversation_id` | string | Required for add/remove |
 
+### `download_media`
+
+Download and decrypt media from a message (images, videos, audio, documents).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `message_id` | string | The message ID containing media |
+| `conversation_id` | string | The conversation the message belongs to |
+
+Returns base64-encoded media data with mimetype, size, duration, and caption.
+
 ### `manage_notes`
 
 Read and write contact notes (WhatsApp Business).
@@ -223,6 +236,10 @@ Read and write contact notes (WhatsApp Business).
 | `action` | string | `get`, `set` |
 | `contact_id` | string | The contact ID |
 | `note` | string | Note text (required for `set`) |
+
+### `get_api_info`
+
+Get HTTP REST API connection info for programmatic access without MCP overhead. Returns URL, auth token, and available endpoints.
 
 ## Multi-instance support
 
@@ -238,4 +255,4 @@ Multiple AI tools can share the same extension connection. The first instance st
 
 ## License
 
-MIT
+[BSL 1.1](./LICENSE) — free to use, converts to MIT after 4 years.
