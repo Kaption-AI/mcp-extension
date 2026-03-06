@@ -7,11 +7,15 @@ import { RelayBridge } from './relayBridge';
 import { createMcpServer, startMcpServer } from './mcpServer';
 import { createHttpServer } from './httpServer';
 import { loadOrCreateToken, getTokenFilePath, SessionManager } from './auth';
+import { checkForUpdates } from './updateCheck';
 
 const WS_URL = 'ws://127.0.0.1:7865';
 
 async function main(): Promise<void> {
   console.error('[Kaption AI MCP] Starting...');
+
+  // Non-blocking update check
+  checkForUpdates();
 
   const authToken = await loadOrCreateToken();
   const sessionManager = new SessionManager();

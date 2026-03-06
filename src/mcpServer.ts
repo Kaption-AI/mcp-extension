@@ -5,6 +5,7 @@ import type { ToolBridge } from './bridge';
 import { Bridge } from './bridge';
 import { RelayBridge } from './relayBridge';
 import { TOOLS } from './tools';
+import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 
 const HTTP_API_PORT = 7866;
 
@@ -92,6 +93,7 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
               }
             }
 
+            const update = getUpdateInfo();
             return {
               content: [
                 {
@@ -99,6 +101,8 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
                   text: JSON.stringify({
                     connected: bridge.connected,
                     accounts: sessions,
+                    version: getCurrentVersion(),
+                    ...(update ? { update_available: update } : {}),
                     help: sessions.length > 1
                       ? 'Use target_session with a sessionId to query a specific account.'
                       : undefined,
