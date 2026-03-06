@@ -50,7 +50,7 @@
   "bugs": {
     "url": "https://github.com/kaptionai/mcp-extension/issues"
   },
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "engines": {
     "node": ">=18"
   }
