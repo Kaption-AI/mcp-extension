@@ -164,7 +164,7 @@ query { query: "meeting" }
 query { unread: true }
 
 # Look up a conversation with messages
-query { id: "1234567890@c.us" }
+query { id: "5511999887766@c.us" }
 
 # Search contacts
 query { query: "Alice", entity: "contacts" }
