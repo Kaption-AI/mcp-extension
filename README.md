@@ -23,7 +23,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "whatsapp": {
       "command": "npx",
-      "args": ["-y", "@kaptionai/mcp-extension"]
+      "args": ["-y", "@kaptionai/mcp-extension@latest"]
     }
   }
 }
@@ -32,7 +32,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 **Claude Code**
 
 ```bash
-claude mcp add whatsapp -- npx -y @kaptionai/mcp-extension
+claude mcp add whatsapp -- npx -y @kaptionai/mcp-extension@latest
 ```
 
 **Cursor**
@@ -44,7 +44,7 @@ Add to `.cursor/mcp.json` in your project or go to Settings > MCP Servers:
   "mcpServers": {
     "whatsapp": {
       "command": "npx",
-      "args": ["-y", "@kaptionai/mcp-extension"]
+      "args": ["-y", "@kaptionai/mcp-extension@latest"]
     }
   }
 }
@@ -59,7 +59,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "whatsapp": {
       "command": "npx",
-      "args": ["-y", "@kaptionai/mcp-extension"]
+      "args": ["-y", "@kaptionai/mcp-extension@latest"]
     }
   }
 }
@@ -75,7 +75,7 @@ Add to `.vscode/mcp.json` in your project:
     "whatsapp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@kaptionai/mcp-extension"]
+      "args": ["-y", "@kaptionai/mcp-extension@latest"]
     }
   }
 }
@@ -90,7 +90,7 @@ Or add to your VS Code `settings.json`:
       "whatsapp": {
         "type": "stdio",
         "command": "npx",
-        "args": ["-y", "@kaptionai/mcp-extension"]
+        "args": ["-y", "@kaptionai/mcp-extension@latest"]
       }
     }
   }
@@ -107,7 +107,7 @@ Add to Zed settings (`~/.config/zed/settings.json`):
     "whatsapp": {
       "command": {
         "path": "npx",
-        "args": ["-y", "@kaptionai/mcp-extension"]
+        "args": ["-y", "@kaptionai/mcp-extension@latest"]
       }
     }
   }
@@ -123,7 +123,7 @@ from agents.mcp import MCPServerStdio
 whatsapp = MCPServerStdio(
     name="whatsapp",
     command="npx",
-    args=["-y", "@kaptionai/mcp-extension"],
+    args=["-y", "@kaptionai/mcp-extension@latest"],
 )
 
 agent = Agent(
@@ -138,7 +138,7 @@ agent = Agent(
 This package runs as a standard MCP server over stdio. To connect from any client:
 
 ```bash
-npx -y @kaptionai/mcp-extension
+npx -y @kaptionai/mcp-extension@latest
 ```
 
 The server communicates via stdin/stdout using the MCP protocol. Point your client's MCP configuration to this command.
