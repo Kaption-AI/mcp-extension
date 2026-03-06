@@ -1,0 +1,57 @@
+{
+  "name": "@kaptionai/mcp-extension",
+  "version": "0.2.0",
+  "description": "MCP server for reading WhatsApp data via the KaptionAI Chrome extension",
+  "bin": {
+    "mcp-whatsapp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "jest --config jest.config.js",
+    "test:watch": "jest --config jest.config.js --watch",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.5"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "whatsapp",
+    "kaptionai",
+    "claude",
+    "cursor",
+    "model-context-protocol",
+    "ai-tools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaptionai/mcp-extension"
+  },
+  "homepage": "https://github.com/kaptionai/mcp-extension#readme",
+  "bugs": {
+    "url": "https://github.com/kaptionai/mcp-extension/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
