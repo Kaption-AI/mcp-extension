@@ -1,10 +1,9 @@
 {
   "name": "@kaptionai/mcp-extension",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "MCP server for reading WhatsApp data via the KaptionAI Chrome extension, with experimental support for WebMCP",
   "bin": {
-    "mcp-whatsapp": "./dist/index.js",
-    "kaption-debug": "./dist/debugCli.js"
+    "mcp-whatsapp": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
