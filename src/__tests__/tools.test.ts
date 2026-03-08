@@ -3,8 +3,8 @@ import { TOOLS, getToolByName, getToolsForMCP } from '../tools';
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 6 tools', () => {
-      expect(TOOLS).toHaveLength(6);
+    it('should contain all 10 tools', () => {
+      expect(TOOLS).toHaveLength(10);
     });
 
     it('should have unique tool names', () => {
@@ -18,6 +18,10 @@ describe('tools', () => {
       'manage_labels',
       'manage_notes',
       'download_media',
+      'manage_chat',
+      'manage_reminders',
+      'manage_scheduled_messages',
+      'manage_lists',
       'get_api_info',
     ];
 
@@ -65,7 +69,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(6);
+      expect(mcpTools).toHaveLength(10);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -315,8 +319,13 @@ describe('tools', () => {
       for (const tool of mcpTools) {
         const props = tool.inputSchema.properties as Record<string, any>;
         for (const [key, prop] of Object.entries(props)) {
-          expect(prop.type).toBeDefined();
-          expect(['string', 'number', 'boolean', 'object'].includes(prop.type)).toBe(true);
+          // Properties use either `type` (simple) or `oneOf` (union)
+          const hasType = prop.type !== undefined;
+          const hasOneOf = prop.oneOf !== undefined;
+          expect(hasType || hasOneOf).toBe(true);
+          if (hasType) {
+            expect(['string', 'number', 'boolean', 'object', 'array'].includes(prop.type)).toBe(true);
+          }
         }
       }
     });
