@@ -6,6 +6,8 @@ export interface ToolDefinition {
   inputSchema: z.ZodType;
 }
 
+// mcp.TOOLS.1 — ten tools + get_api_info local-only
+// mcp.PRIVACY.1 — no send_message tool; manage_chat.set_draft only stages text
 export const TOOLS: ToolDefinition[] = [
   {
     name: 'query',
@@ -62,6 +64,7 @@ export const TOOLS: ToolDefinition[] = [
       before: z.string().optional().describe('Return messages before this ISO 8601 datetime (e.g. "2026-03-01T12:00:00.000Z") for cursor-based pagination backward'),
       after: z.string().optional().describe('Return messages after this ISO 8601 datetime (e.g. "2026-03-01T12:00:00.000Z") for incremental sync'),
       include_participants: z.boolean().optional().describe('Include group participants in results. Useful when looking up a contact by ID to see which groups they belong to, or when querying a group to see its members.'),
+          // mcp.TOOLS.5 — optional target_session, default to most-recently-active
       target_session: z.string().optional().describe('Session ID to target a specific WhatsApp account. Get session IDs from entity="session". If omitted, routes to the most recently active account.'),
     }),
   },

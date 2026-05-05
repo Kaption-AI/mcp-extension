@@ -25,6 +25,7 @@ export function getTokenFilePath(): string {
 }
 
 /**
+ * mcp.LOCAL_HUB.3 — 32-byte token, 0600 file, 7-day rolling session
  * Load existing auth token or create a new one.
  * File is created with mode 0600 (owner read/write only).
  */
@@ -44,6 +45,7 @@ export async function loadOrCreateToken(): Promise<string> {
 }
 
 /**
+ * mcp.AUTH.1 — timing-safe token comparison
  * Timing-safe token comparison. Returns false for mismatched lengths.
  */
 export function validateToken(provided: string, expected: string): boolean {

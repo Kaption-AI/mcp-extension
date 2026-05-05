@@ -29,6 +29,7 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
       shape,
       async (params: Record<string, unknown>) => {
         try {
+          // mcp.LOCAL_HUB.5 — stdio MCP server registers all ten tools
           // Handle get_api_info locally (no extension needed)
           if (tool.name === 'get_api_info') {
             const info = {

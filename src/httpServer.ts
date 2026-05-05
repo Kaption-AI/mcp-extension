@@ -23,6 +23,7 @@ function parseUrl(raw: string | undefined): { path: string; params: URLSearchPar
   return { path: url.pathname, params: url.searchParams };
 }
 
+// mcp.LOCAL_HUB.6 — HTTP REST API on 7866; /health no-auth, others bearer
 export function createHttpServer(bridge: ToolBridge, authToken: string): Promise<Server> {
   const server = createServer(async (req, res) => {
     // CORS headers for local dev

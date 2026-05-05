@@ -14,7 +14,7 @@ const WS_URL = 'ws://127.0.0.1:7865';
 async function main(): Promise<void> {
   console.error('[Kaption AI MCP] Starting...');
 
-  // Non-blocking update check
+  // mcp.LOCAL_HUB.8 — daily update check, non-blocking
   checkForUpdates();
 
   const authToken = await loadOrCreateToken();
@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   let cleanup = () => {};
 
   try {
-    // Try hub mode: own the WebSocket server
+    // mcp.LOCAL_HUB.1 — hub mode owns ports; EADDRINUSE → relay mode
     const bridge = new Bridge();
     const wss = await createWebSocketServer(bridge, authToken, sessionManager);
     toolBridge = bridge;

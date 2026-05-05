@@ -183,7 +183,7 @@ export class RelayBridge implements ToolBridge {
     });
   }
 
-  /** Hub died — try to start our own WS server and become the hub. */
+  /** mcp.LOCAL_HUB.1 — relay promotes to hub when hub dies */
   private async promoteToHub(): Promise<void> {
     console.error('[Kaption AI MCP] Hub disconnected, promoting to hub mode...');
     try {

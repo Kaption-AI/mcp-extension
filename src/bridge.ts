@@ -45,6 +45,7 @@ interface ExtensionConnection {
 export class Bridge extends EventEmitter implements ToolBridge {
   private pendingRequests = new Map<string, PendingRequest>();
   private requestCounter = 0;
+  // mcp.AUTH.3 — hub keys connections by sessionId, not raw phone number
   private connections = new Map<string, ExtensionConnection>();
   private lastActiveId: string | null = null;
   private readonly REQUEST_TIMEOUT_MS = 30_000;

@@ -8,6 +8,7 @@ const CONNECTION_TIMEOUT_MS = 10_000;
 const PAIRING_TIMEOUT_MS = 30_000;
 
 /**
+ * mcp.LOCAL_HUB.2 — origin restriction blocks CSRF from http(s):// origins
  * Verify the origin header to block CSRF from web pages.
  * Allow: no origin (Node.js clients), chrome-extension://, moz-extension://
  * Block: http://, https://
@@ -68,7 +69,7 @@ export function createWebSocketServer(
       return extensions;
     };
 
-    // Notify relay clients when extension status changes
+    // mcp.LOCAL_HUB.7 — broadcast extension_status deltas to relay clients
     const broadcastExtensionStatus = () => {
       const extensions = getExtensionList();
       const msg = JSON.stringify({
@@ -229,6 +230,7 @@ async function handleExtensionHandshake(
 }
 
 /**
+ * mcp.LOCAL_HUB.4 — pairing flow
  * Pairing flow: ask extension to show Allow/Deny popup.
  */
 function startPairingFlow(
