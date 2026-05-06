@@ -3,8 +3,8 @@ import { TOOLS, getToolByName, getToolsForMCP } from '../tools';
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 10 tools', () => {
-      expect(TOOLS).toHaveLength(10);
+    it('should contain all 11 tools', () => {
+      expect(TOOLS).toHaveLength(11);
     });
 
     it('should have unique tool names', () => {
@@ -23,6 +23,7 @@ describe('tools', () => {
       'manage_scheduled_messages',
       'manage_lists',
       'get_api_info',
+      'get_analytics',
     ];
 
     it.each(expectedTools)('should include tool: %s', (name) => {
@@ -69,7 +70,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(10);
+      expect(mcpTools).toHaveLength(11);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -133,6 +134,14 @@ describe('tools', () => {
 
     it('should have community param as string', () => {
       expect(schema.properties.community.type).toBe('string');
+    });
+
+    it('should have exclude_archived param as boolean (parity with cloud relay)', () => {
+      expect(schema.properties.exclude_archived.type).toBe('boolean');
+    });
+
+    it('should have exclude_muted param as boolean (parity with cloud relay)', () => {
+      expect(schema.properties.exclude_muted.type).toBe('boolean');
     });
 
     it('should validate valid query params', () => {
