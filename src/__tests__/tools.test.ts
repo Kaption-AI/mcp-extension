@@ -3,8 +3,8 @@ import { TOOLS, getToolByName, getToolsForMCP } from '../tools';
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 11 tools', () => {
-      expect(TOOLS).toHaveLength(11);
+    it('should contain all 17 tools', () => {
+      expect(TOOLS).toHaveLength(17);
     });
 
     it('should have unique tool names', () => {
@@ -22,6 +22,12 @@ describe('tools', () => {
       'manage_reminders',
       'manage_scheduled_messages',
       'manage_lists',
+      'list_contacts',
+      'get_contact',
+      'get_contact_groups',
+      'list_groups',
+      'get_group',
+      'export_contacts',
       'get_api_info',
       'get_analytics',
     ];
@@ -70,7 +76,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(11);
+      expect(mcpTools).toHaveLength(17);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
