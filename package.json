@@ -1,6 +1,7 @@
 {
   "name": "@kaptionai/mcp-extension",
-  "version": "0.5.3",
+  "version": "0.5.4",
+  "mcpName": "io.github.Kaption-AI/mcp-extension",
   "description": "MCP server for reading WhatsApp data via the KaptionAI Chrome extension, with experimental support for WebMCP",
   "bin": {
     "mcp-whatsapp": "./dist/index.js"
@@ -52,6 +53,10 @@
     "url": "https://github.com/Kaption-AI/mcp-extension/issues"
   },
   "license": "BUSL-1.1",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=18"
   }

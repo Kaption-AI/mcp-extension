@@ -67,6 +67,12 @@ export class SessionManager {
   }
 
   private sessionPath(id: string): string {
+    // Guard against path traversal — session IDs are always `sess_` + 24 hex
+    // chars (see createSession). Reject anything else before touching the fs,
+    // so a crafted session_id from the pre-auth handshake can't escape `dir`.
+    if (!/^sess_[0-9a-f]{24}$/.test(id)) {
+      throw new Error('Invalid session id');
+    }
     return path.join(this.dir, `${id}.json`);
   }
 

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Kaption-AI/mcp-extension",
+  "title": "Kaption WhatsApp",
+  "description": "Read and manage your WhatsApp conversations through the KaptionAI browser extension.",
+  "version": "0.5.4",
+  "repository": {
+    "url": "https://github.com/Kaption-AI/mcp-extension",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@kaptionai/mcp-extension",
+      "version": "0.5.4",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

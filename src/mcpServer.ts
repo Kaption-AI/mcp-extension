@@ -23,10 +23,13 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
   for (const tool of TOOLS) {
     const schema = tool.inputSchema;
     const shape = schema instanceof z.ZodObject ? schema.shape : {};
-    server.tool(
+    server.registerTool(
       tool.name,
-      tool.description,
-      shape,
+      {
+        description: tool.description,
+        inputSchema: shape,
+        annotations: tool.annotations ?? {},
+      },
       async (params: Record<string, unknown>) => {
         try {
           // mcp.LOCAL_HUB.5 — stdio MCP server registers all ten tools
