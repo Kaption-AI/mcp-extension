@@ -348,6 +348,20 @@ Read and write contact notes (WhatsApp Business).
 | `contact_id` | string | The contact ID |
 | `note` | string | Note text (required for `set`) |
 
+### `call_recordings`
+
+Read WhatsApp call recordings made by the Kaption extension and their transcripts, with every word timed. Each recording names its conversation (the other person, or the group for a group call). Recordings of locked chats are never returned.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `action` | string | `list`, `get`, `search` |
+| `id` | string | Recording ID (required for `get`) |
+| `search` | string | Text to find in names and transcripts (required for `search`) |
+| `conversation_id` | string | Only recordings of this contact or group |
+| `date_from` / `date_to` | string | ISO 8601 date range of when the call started |
+| `limit` | number | Max recordings (default 20, max 100) |
+| `include_words` | boolean | For `get`: each word with its start and end in seconds |
+
 ### `get_api_info`
 
 Get HTTP REST API connection info for programmatic access without MCP overhead. Returns URL, auth token, and available endpoints.

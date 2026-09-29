@@ -3,8 +3,8 @@ import { TOOLS, getToolByName, getToolsForMCP } from '../tools';
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 17 tools', () => {
-      expect(TOOLS).toHaveLength(17);
+    it('should contain all 18 tools', () => {
+      expect(TOOLS).toHaveLength(18);
     });
 
     it('should have unique tool names', () => {
@@ -30,6 +30,7 @@ describe('tools', () => {
       'export_contacts',
       'get_api_info',
       'get_analytics',
+      'call_recordings',
     ];
 
     it.each(expectedTools)('should include tool: %s', (name) => {
@@ -76,7 +77,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(17);
+      expect(mcpTools).toHaveLength(18);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -354,6 +355,22 @@ describe('tools', () => {
       for (const [key, prop] of Object.entries(props)) {
         expect(prop.description || prop.enum).toBeDefined();
       }
+    });
+  });
+
+  describe('call_recordings', () => {
+    const tool = getToolByName('call_recordings')!;
+
+    it('reads only: list, get and search', () => {
+      expect(tool.annotations).toEqual({ readOnlyHint: true, openWorldHint: false });
+      expect(tool.inputSchema.safeParse({ action: 'list' }).success).toBe(true);
+      expect(tool.inputSchema.safeParse({ action: 'delete' }).success).toBe(false);
+    });
+
+    it('filters by conversation and dates, caps the limit at 100', () => {
+      const ok = tool.inputSchema.safeParse({ action: 'search', search: 'budget', conversation_id: '5491157390064@c.us', date_from: '2026-09-01', limit: 100 });
+      expect(ok.success).toBe(true);
+      expect(tool.inputSchema.safeParse({ action: 'list', limit: 101 }).success).toBe(false);
     });
   });
 });
