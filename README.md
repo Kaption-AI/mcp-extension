@@ -305,27 +305,39 @@ manage_reminders { action: "list", filter: "all" }
 
 ### `manage_scheduled_messages`
 
-Schedule messages to be sent automatically at a specific time. Only works for 1:1 chats.
+Schedule messages to be sent automatically at a specific time, in one of two modes:
+
+- **`bot`** (default) — sent from **Kaption's WhatsApp number**, not yours. Stored in Kaption's cloud and sent even when your computer is off. One-to-one chats only; one line, up to 800 characters.
+- **`local`** ("From this computer") — sent from **your own WhatsApp number**, as you, while this computer and WhatsApp are open. Nothing leaves your device. Kaption keeps it within safe limits automatically (a few messages an hour and a day, minutes apart, only to chats where the other person has written, at most 3 a day to groups) and refuses what doesn't fit, with the reason. The only mode that can send to **groups** (ones you can post in and posted in within the last 30 days). Text only. A message whose time passes while the computer is off is marked missed, never sent late on its own.
+
+The local mode has to be turned on by you in Kaption first (the "From this computer" option in the scheduling picker, after reading the limits and risks). An AI assistant can't turn it on; until you do, local requests are refused with `(reason: no-consent)`. It is also rolled out gradually: where it isn't available yet, local requests are refused with `(reason: flag-off)` and the bot works as before.
 
 ```
-# List pending messages
+# List pending messages of both modes (each one has a "mode")
 manage_scheduled_messages { action: "list" }
 
-# Schedule a message
+# Schedule with the Kaption bot
 manage_scheduled_messages { action: "create", message: "Hey, just following up!", datetime: "2026-03-07T09:00:00Z", conversation_id: "5511999887766@c.us" }
+
+# Schedule from your own number, or to a group
+manage_scheduled_messages { action: "create", mode: "local", message: "Running 10 min late", datetime: "2026-03-07T09:00:00-03:00", conversation_id: "5511999887766@c.us" }
+manage_scheduled_messages { action: "create", mode: "local", message: "Standup moved to 10", datetime: "2026-03-07T09:00:00Z", conversation_id: "120363000000000000@g.us" }
 
 # Cancel a scheduled message
 manage_scheduled_messages { action: "delete", id: "msg_abc123" }
+manage_scheduled_messages { action: "cancel", mode: "local", id: "3f2c…" }
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `action` | string | `list`, `get`, `create`, `update`, `delete` |
+| `action` | string | `list`, `get`, `create`, `update`, `delete`; with `mode: "local"` also `cancel`, `remove` (a finished one), `send_now` (a missed or failed one) |
+| `mode` | string | `bot` (default) or `local`. For `list`, omit to get both modes |
 | `filter` | string | For list: `pending` (default), `sent`, `all` |
-| `id` | string | Scheduled message ID (for get/update/delete) |
-| `conversation_id` | string | Contact/chat ID to send to (for create) |
-| `message` | string | Message text (max 800 chars, no newlines) |
+| `id` | string | Scheduled message ID (for get/update/delete/cancel/remove/send_now) |
+| `conversation_id` | string | Chat to send to (for create): a person, or a group with `mode: "local"` |
+| `message` | string | Message text. Bot: max 800 chars, no newlines. Local: up to 2000 chars |
 | `datetime` | string | ISO 8601 datetime when the message should be sent |
+| `notification_type` | string | Bot only: `extension`, `whatsapp`, or `automatic` (default) |
 
 ### `download_media`
 

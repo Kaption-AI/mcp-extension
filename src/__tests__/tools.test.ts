@@ -358,6 +358,56 @@ describe('tools', () => {
     });
   });
 
+  // kext mcp.TOOLS.13 — two modes: bot (Kaption's number, default) and local (the user's own number, from this computer)
+  describe('manage_scheduled_messages tool schema', () => {
+    const tool = getToolByName('manage_scheduled_messages')!;
+    const parse = (input: Record<string, unknown>) => tool.inputSchema.safeParse(input);
+
+    it('takes mode "bot" or "local", optional (the bot stays the default)', () => {
+      expect(parse({ action: 'list' }).success).toBe(true);
+      expect(parse({ action: 'list', mode: 'bot' }).success).toBe(true);
+      expect(parse({ action: 'list', mode: 'local' }).success).toBe(true);
+      expect(parse({ action: 'list', mode: 'cloud' }).success).toBe(false);
+      const parsed = parse({ action: 'create', mode: 'local', message: 'Hi', datetime: '2026-10-01T09:00:00Z', conversation_id: '120363000000000000@g.us' });
+      expect(parsed.success && parsed.data).toMatchObject({ mode: 'local', conversation_id: '120363000000000000@g.us' });
+    });
+
+    it('keeps the bot actions and adds cancel, remove and send_now', () => {
+      for (const action of ['list', 'get', 'create', 'update', 'delete', 'cancel', 'remove', 'send_now']) {
+        expect(parse({ action }).success).toBe(true);
+      }
+      expect(parse({ action: 'consent' }).success).toBe(false);
+    });
+
+    it('has no way to turn the local mode on (no consent parameter survives parsing)', () => {
+      const parsed = parse({ action: 'create', mode: 'local', accept: true, consent: true });
+      expect(parsed.success && parsed.data).not.toHaveProperty('accept');
+      expect(parsed.success && parsed.data).not.toHaveProperty('consent');
+    });
+
+    it('says who sends in each mode, that groups need local mode, and that local is text only', () => {
+      expect(tool.description).toMatch(/bot \(default\) - sent from Kaption's WhatsApp number/);
+      expect(tool.description).toMatch(/sent from the user's own WhatsApp number, as them, while this computer and WhatsApp are open/);
+      expect(tool.description).toMatch(/safe limits automatically/);
+      expect(tool.description).toMatch(/The only mode that can send to groups/);
+      expect(tool.description).toMatch(/Text only/);
+      expect(tool.description).toMatch(/an assistant cannot turn it on/);
+    });
+
+    it('stays a destructive, open-world write tool', () => {
+      expect(tool.annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
+    });
+
+    it('describes mode in the JSON Schema', () => {
+      const json = getToolsForMCP().find((t) => t.name === 'manage_scheduled_messages')!;
+      const props = json.inputSchema.properties as Record<string, any>;
+      expect(props.mode.enum).toEqual(['bot', 'local']);
+      expect(props.mode.description).toMatch(/Kaption's WhatsApp number/);
+      expect(props.action.enum).toContain('send_now');
+      expect((json.inputSchema.required as string[])).toEqual(['action']);
+    });
+  });
+
   describe('call_recordings', () => {
     const tool = getToolByName('call_recordings')!;
 
