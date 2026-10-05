@@ -4,8 +4,9 @@ name: Publish to npm (provenance)
 # attestation. Trigger by pushing a version tag (e.g. `git tag v0.5.4 && git push --tags`)
 # or running the workflow manually.
 #
-# One-time setup: add an npm "Automation" access token as the repo secret NPM_TOKEN
-# (Settings → Secrets and variables → Actions).
+# npm trusts this workflow directly (trusted publishing over GitHub OIDC), so
+# there is no npm token: the package's npm settings name Kaption-AI/mcp-extension
+# and publish.yml as its trusted publisher. Trusted publishing needs npm 11.5.1+.
 
 on:
   push:
@@ -25,8 +26,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      # Node 24 ships npm 11; make sure it's new enough for trusted publishing.
+      - run: npm install -g npm@^11.5.1
 
       # npm ci requires package.json and package-lock.json to be in sync.
       - run: npm ci
@@ -35,5 +39,3 @@ jobs:
       # --provenance attaches a signed, publicly verifiable attestation binding the
       # package to this repo + workflow + commit (npm >= 9.5, bundled with Node 20).
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
