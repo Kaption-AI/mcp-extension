@@ -3,8 +3,8 @@ import { TOOLS, getToolByName, getToolsForMCP } from '../tools';
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 18 tools', () => {
-      expect(TOOLS).toHaveLength(18);
+    it('should contain all 19 tools', () => {
+      expect(TOOLS).toHaveLength(19);
     });
 
     it('should have unique tool names', () => {
@@ -20,6 +20,7 @@ describe('tools', () => {
       'download_media',
       'manage_chat',
       'manage_reminders',
+      'send_message',
       'manage_scheduled_messages',
       'manage_lists',
       'list_contacts',
@@ -77,7 +78,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(18);
+      expect(mcpTools).toHaveLength(19);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -390,7 +391,7 @@ describe('tools', () => {
       expect(tool.description).toMatch(/sent from the user's own WhatsApp number, as them, while this computer and WhatsApp are open/);
       expect(tool.description).toMatch(/safe limits automatically/);
       expect(tool.description).toMatch(/The only mode that can send to groups/);
-      expect(tool.description).toMatch(/Text only/);
+      expect(tool.description).toMatch(/one image, document, audio or video attachment/);
       expect(tool.description).toMatch(/an assistant cannot turn it on/);
     });
 
@@ -422,5 +423,27 @@ describe('tools', () => {
       expect(ok.success).toBe(true);
       expect(tool.inputSchema.safeParse({ action: 'list', limit: 101 }).success).toBe(false);
     });
+  });
+});
+
+
+describe('mcp-local-send schemas', () => {
+  const file = { name: 'file.pdf', mime: 'application/pdf', size: 3, dataB64: 'YWJj' };
+  const send = TOOLS.find(t => t.name === 'send_message')!;
+  const schedule = TOOLS.find(t => t.name === 'manage_scheduled_messages')!;
+  it('mcp-local-send.SEND.2 accepts an attachment-only group send and preserves session routing', () => {
+    const input = { conversation_id: '120363000000000001@g.us', attachment: file, target_session: 'synthetic' };
+    expect(send.inputSchema.parse(input)).toEqual(input);
+  });
+  it('mcp-local-send.MEDIA.1 rejects oversized uploads and path filenames', () => {
+    for (const patch of [{ size: 8388609 }, { name: '../file.pdf' }]) {
+      expect(send.inputSchema.safeParse({ conversation_id: '15555550100@c.us', attachment: { ...file, ...patch } }).success).toBe(false);
+    }
+  });
+  it('accepts attachment removal and local scheduling', () => {
+    expect(schedule.inputSchema.parse({ action: 'update', mode: 'local', id: 'synthetic', attachment: null })).toMatchObject({ attachment: null, mode: 'local' });
+  });
+  it('marks sending as a non-idempotent write', () => {
+    expect(send.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false });
   });
 });
