@@ -1,3 +1,4 @@
+import { resolveLocalAttachment } from './attachment';
 import { EventEmitter } from 'events';
 
 export interface SessionInfo {
@@ -139,6 +140,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
       );
     }
 
+    if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => (await this.callTool('create_attachment_upload', metadata, sessionId ?? undefined)).data);
     const id = `req_${++this.requestCounter}`;
 
     const data = await new Promise((resolve, reject) => {

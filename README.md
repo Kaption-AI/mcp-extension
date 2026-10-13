@@ -404,3 +404,18 @@ When WebMCP is available, the extension registers tools prefixed with `kaption_`
 ## License
 
 [BSL 1.1](./LICENSE) — free to use, converts to MIT after 4 years.
+
+
+### One-time attachments (owner-only MCP_LOCAL_SEND)
+
+Use `create_attachment_upload({name,mime,size,target_session?})`, PUT the file bytes to
+its `uploadUrl` within 15 minutes, then send `attachment:{ref:attachmentRef}` within one
+hour. The selected Kaption account consumes the ref once and stores it locally, so a
+schedule days later does not depend on the temporary upload. If a download fails after
+consumption, create a new upload. Maximum size: 8 MiB; image, document, audio or video.
+
+On this local hub, `attachment:{path:"/absolute/file.pdf"}` uploads automatically; optional
+`name` and `mime` override the filename/type. Paths must name regular files. The cloud
+relay and WebMCP do not accept paths. Arbitrary URLs are never accepted. Existing small
+inline `{name,mime,size,dataB64}` uploads continue to work. All sends still require the
+extension's owner-only flag, consent and ask-first rules. No assistant can accept consent.

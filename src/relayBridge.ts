@@ -1,3 +1,4 @@
+import { resolveLocalAttachment } from './attachment';
 import WebSocket from 'ws';
 import { Bridge } from './bridge';
 import type { ToolBridge, ToolCallResult, SessionInfo } from './bridge';
@@ -158,6 +159,11 @@ export class RelayBridge implements ToolBridge {
       throw new Error('Not connected to Kaption AI MCP hub');
     }
 
+    if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => {
+      const slot = await this.callTool('create_attachment_upload', metadata, targetSessionId);
+      targetSessionId = slot.source?.sessionId ?? targetSessionId;
+      return slot.data;
+    });
     const id = `relay_${++this.requestCounter}`;
 
     // Include target_session so the hub routes to the right extension
