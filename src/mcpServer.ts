@@ -16,7 +16,7 @@ const HTTP_API_PORT = 7866;
 export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServer {
   const server = new McpServer({
     name: 'kaptionai-whatsapp',
-    version: '0.2.0',
+    version: getCurrentVersion(),
   });
 
   // Register each tool
