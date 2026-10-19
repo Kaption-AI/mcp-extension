@@ -5,10 +5,18 @@ const PACKAGE_NAME = '@kaptionai/mcp-extension';
 
 let updateAvailable: { current: string; latest: string } | null = null;
 
-/** Get the current installed version. */
+let startedWith: string | undefined;
+
+/**
+ * The version of the code this process is running: package.json read once, on first use. Reading it again
+ * on every call reported a newer version than the running code after an update on disk (hub on 0.5.6
+ * answering 0.5.8 until restarted).
+ */
 export function getCurrentVersion(): string {
-  const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
-  return pkg.version;
+  if (startedWith === undefined) {
+    startedWith = String(JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).version);
+  }
+  return startedWith;
 }
 
 /** Non-blocking check against npm registry. Call once at startup. */
