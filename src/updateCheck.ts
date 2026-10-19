@@ -5,10 +5,19 @@ const PACKAGE_NAME = '@kaptionai/mcp-extension';
 
 let updateAvailable: { current: string; latest: string } | null = null;
 
-/** Get the current installed version. */
+let runningVersion: string | null = null;
+
+/**
+ * The version of the code this process is running. Read once: a checkout updated and rebuilt under a running
+ * hub changes package.json on disk, but not the code already loaded, so re-reading it would report a version
+ * the process does not run (and disagree with update_available.current).
+ */
 export function getCurrentVersion(): string {
-  const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
-  return pkg.version;
+  if (runningVersion === null) {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+    runningVersion = String(pkg.version);
+  }
+  return runningVersion;
 }
 
 /** Non-blocking check against npm registry. Call once at startup. */
