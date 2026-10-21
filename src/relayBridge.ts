@@ -1,6 +1,6 @@
 import { resolveLocalAttachment } from './attachment';
 import WebSocket from 'ws';
-import { Bridge } from './bridge';
+import { Bridge, UnknownSessionError } from './bridge';
 import type { ToolBridge, ToolCallResult, SessionInfo } from './bridge';
 import { createWebSocketServer } from './wsServer';
 import { loadOrCreateToken, SessionManager } from './auth';
@@ -123,7 +123,10 @@ export class RelayBridge implements ToolBridge {
           clearTimeout(pending.timeout);
           this.pendingRequests.delete(msg.id);
           if (msg.error) {
-            pending.reject(new Error(msg.error.message));
+            const unknown = msg.error.data?.code === 'UNKNOWN_SESSION';
+            pending.reject(unknown
+              ? new UnknownSessionError(String(msg.error.data.sessionId), msg.error.data.connected ?? [])
+              : new Error(msg.error.message));
           } else {
             pending.resolve(msg.result);
           }

@@ -2,8 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import type { ToolBridge } from './bridge';
-import { Bridge } from './bridge';
-import { RelayBridge } from './relayBridge';
+import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
 import { TOOLS } from './tools';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 
@@ -73,29 +72,7 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
 
           // Handle session query locally — return flat list of all connected WhatsApp accounts
           if (tool.name === 'query' && params.entity === 'session') {
-            const sessions: any[] = [];
-
-            if (bridge instanceof Bridge) {
-              for (const [sessionId, info] of bridge.sessions) {
-                sessions.push({
-                  sessionId,
-                  phone: info.phone || '',
-                  pushname: info.pushname || '',
-                  isBusiness: info.isBusiness || false,
-                  browser: info.browser || 'unknown',
-                });
-              }
-            } else if (bridge instanceof RelayBridge) {
-              for (const ext of bridge.extensions) {
-                sessions.push({
-                  sessionId: ext.sessionId,
-                  phone: ext.phone || '',
-                  pushname: ext.pushname || '',
-                  isBusiness: ext.isBusiness || false,
-                  browser: ext.browser || 'unknown',
-                });
-              }
-            }
+            const sessions = listAccounts(bridge);
 
             const update = getUpdateInfo();
             return {
@@ -134,10 +111,8 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
             : { data, ...(sourceInfo && { _source: sourceInfo }) };
 
           // Multi-session warning
-          const hasMultiple = (bridge instanceof Bridge && bridge.sessions.size > 1)
-            || (bridge instanceof RelayBridge && bridge.extensions.length > 1);
-          if (!targetSession && hasMultiple) {
-            response._warning = 'Multiple accounts connected. Use target_session for accuracy. Query entity="session" to see accounts.';
+          if (!targetSession && listAccounts(bridge).length > 1) {
+            response._warning = MULTIPLE_ACCOUNTS_WARNING;
           }
 
           return {

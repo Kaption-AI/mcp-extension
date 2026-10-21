@@ -33,6 +33,18 @@ interface PendingRequest {
 
 type SendFn = (data: string) => void;
 
+/**
+ * mcp.LOCAL_HUB.10 — a request that names an account the hub doesn't have. It never falls back to
+ * another account: the caller asked for one account's data and must not get another's.
+ */
+export class UnknownSessionError extends Error {
+  readonly code = 'UNKNOWN_SESSION';
+  constructor(readonly sessionId: string, readonly connected: string[]) {
+    super(`Account ${sessionId} is not connected. Connected accounts: ${connected.length ? connected.join(', ') : 'none'}. Query entity="session" for the current list.`);
+    this.name = 'UnknownSessionError';
+  }
+}
+
 interface ExtensionConnection {
   sendFn: SendFn;
   session: SessionInfo | null;
@@ -78,6 +90,8 @@ export class Bridge extends EventEmitter implements ToolBridge {
     if (conn) {
       conn.session = info;
       this.lastActiveId = sessionId;
+      // mcp.LOCAL_HUB.10 — relay clients learn the account once its handshake names it.
+      this.emit('session', sessionId);
     }
   }
 
@@ -121,6 +135,9 @@ export class Bridge extends EventEmitter implements ToolBridge {
 
     if (this.connections.size === 0) {
       this.emit('disconnected');
+    } else {
+      // mcp.LOCAL_HUB.10 — one account left while others stay: relay clients drop it from their list.
+      this.emit('session', sessionId);
     }
   }
 
@@ -133,6 +150,9 @@ export class Bridge extends EventEmitter implements ToolBridge {
     params: Record<string, unknown>,
     targetSessionId?: string,
   ): Promise<ToolCallResult> {
+    if (targetSessionId && !this.connections.has(targetSessionId)) {
+      throw new UnknownSessionError(targetSessionId, [...this.connections.keys()]);
+    }
     const [sessionId, conn] = this.getConnection(targetSessionId);
     if (!conn) {
       throw new Error(

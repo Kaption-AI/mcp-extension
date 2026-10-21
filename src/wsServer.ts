@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
-import { Bridge } from './bridge';
+import { Bridge, UnknownSessionError } from './bridge';
 import { validateToken, SessionManager } from './auth';
 
 const WS_PORT = 7865;
@@ -85,6 +85,9 @@ export function createWebSocketServer(
 
     bridge.on('connected', () => broadcastExtensionStatus());
     bridge.on('disconnected', () => broadcastExtensionStatus());
+    // mcp.LOCAL_HUB.10 — 'connected' fires before the handshake names the account, so the list it
+    // broadcasts is still missing it; send it again once the account is known.
+    bridge.on('session', () => broadcastExtensionStatus());
 
     wss.on('connection', (ws) => {
       // Connection timeout: close if no first message within 10s
@@ -181,7 +184,14 @@ function handleRelayConnect(
             ws.send(JSON.stringify({
               jsonrpc: '2.0',
               id: parsed.id,
-              error: { code: -32603, message: error.message },
+              error: {
+                code: -32603,
+                message: error.message,
+                // mcp.LOCAL_HUB.10 — relays rebuild the unknown-account error from this.
+                ...(error instanceof UnknownSessionError
+                  ? { data: { code: error.code, sessionId: error.sessionId, connected: error.connected } }
+                  : {}),
+              },
             }));
           }
         });

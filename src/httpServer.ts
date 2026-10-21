@@ -1,6 +1,16 @@
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 import type { ToolBridge } from './bridge';
 import { validateToken } from './auth';
+import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
+import { UnknownSessionError } from './bridge';
+
+/** mcp.LOCAL_HUB.10 — a named account the hub doesn't have answers 404 UNKNOWN_SESSION, never another account. */
+function toolError(res: ServerResponse, error: unknown): void {
+  if (error instanceof UnknownSessionError) {
+    return respond(res, 404, { ok: false, error: error.message, code: error.code, session: error.sessionId });
+  }
+  respond(res, 500, { ok: false, error: (error as Error).message, code: 'TOOL_ERROR' });
+}
 
 const HTTP_PORT = 7866;
 
@@ -24,7 +34,7 @@ function parseUrl(raw: string | undefined): { path: string; params: URLSearchPar
 }
 
 // mcp.LOCAL_HUB.6 — HTTP REST API on 7866; /health no-auth, others bearer
-export function createHttpServer(bridge: ToolBridge, authToken: string): Promise<Server> {
+export function createHttpServer(bridge: ToolBridge, authToken: string, port = HTTP_PORT): Promise<Server> {
   const server = createServer(async (req, res) => {
     // CORS headers for local dev
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -54,16 +64,10 @@ export function createHttpServer(bridge: ToolBridge, authToken: string): Promise
     }
 
     // GET /sessions
+    // mcp.LOCAL_HUB.10 — every connected account, listed by the hub (it used to ask one account,
+    // which answered only for itself).
     if (path === '/sessions' && req.method === 'GET') {
-      if (!bridge.connected) {
-        return respond(res, 200, { ok: true, data: { sessions: [] } });
-      }
-      try {
-        const result = await bridge.callTool('query', { entity: 'session' });
-        return respond(res, 200, { ok: true, data: result.data });
-      } catch (error) {
-        return respond(res, 500, { ok: false, error: (error as Error).message, code: 'INTERNAL_ERROR' });
-      }
+      return respond(res, 200, { ok: true, data: { connected: bridge.connected, accounts: listAccounts(bridge) } });
     }
 
     // GET /media/:messageId?conversation_id=...&session=...
@@ -104,7 +108,7 @@ export function createHttpServer(bridge: ToolBridge, authToken: string): Promise
         res.end(buffer);
         return;
       } catch (error) {
-        return respond(res, 500, { ok: false, error: (error as Error).message, code: 'TOOL_ERROR' });
+        return toolError(res, error);
       }
     }
 
@@ -125,19 +129,36 @@ export function createHttpServer(bridge: ToolBridge, authToken: string): Promise
         return respond(res, 400, { ok: false, error: 'Invalid JSON body', code: 'BAD_REQUEST' });
       }
 
-      // Session routing from query param
-      const session = params.get('session');
-      if (session) toolParams.target_session = session;
+      // mcp.LOCAL_HUB.10 — route by ?session= or by target_session in the body, the name the MCP
+      // tools use. Before, a body target_session was ignored and the most recent account answered.
+      const querySession = params.get('session') || undefined;
+      const bodySession = typeof toolParams.target_session === 'string' && toolParams.target_session
+        ? toolParams.target_session
+        : undefined;
+      if (querySession && bodySession && querySession !== bodySession) {
+        return respond(res, 400, {
+          ok: false,
+          error: `?session=${querySession} and target_session=${bodySession} name different accounts`,
+          code: 'BAD_REQUEST',
+        });
+      }
+      const session = querySession ?? bodySession;
+      delete toolParams.target_session;
+
+      if (toolName === 'query' && toolParams.entity === 'session' && !session) {
+        return respond(res, 200, { ok: true, data: { connected: bridge.connected, accounts: listAccounts(bridge) } });
+      }
 
       try {
-        const result = await bridge.callTool(toolName, toolParams, session || undefined);
+        const result = await bridge.callTool(toolName, toolParams, session);
         return respond(res, 200, {
           ok: true,
           data: result.data,
           source: result.source || undefined,
+          ...(!session && listAccounts(bridge).length > 1 ? { _warning: MULTIPLE_ACCOUNTS_WARNING } : {}),
         });
       } catch (error) {
-        return respond(res, 500, { ok: false, error: (error as Error).message, code: 'TOOL_ERROR' });
+        return toolError(res, error);
       }
     }
 
@@ -147,14 +168,14 @@ export function createHttpServer(bridge: ToolBridge, authToken: string): Promise
   return new Promise((resolve, reject) => {
     server.on('error', (err) => {
       if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
-        console.error(`[Kaption AI MCP] HTTP port ${HTTP_PORT} in use, skipping HTTP server`);
+        console.error(`[Kaption AI MCP] HTTP port ${port} in use, skipping HTTP server`);
         resolve(server);
       } else {
         reject(err);
       }
     });
-    server.listen(HTTP_PORT, '127.0.0.1', () => {
-      console.error(`[Kaption AI MCP] HTTP API listening on http://127.0.0.1:${HTTP_PORT}`);
+    server.listen(port, '127.0.0.1', () => {
+      console.error(`[Kaption AI MCP] HTTP API listening on http://127.0.0.1:${port}`);
       resolve(server);
     });
   });
