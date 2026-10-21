@@ -16,26 +16,36 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for npm provenance via GitHub OIDC
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm provenance via GitHub OIDC
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       # Node 24 ships npm 11; make sure it's new enough for trusted publishing.
-      - run: npm install -g npm@^11.5.1
+      # Exact version (no range) and no install scripts: this job holds an OIDC token.
+      - run: npm install -g npm@11.21.0 --ignore-scripts
 
-      # npm ci requires package.json and package-lock.json to be in sync.
-      - run: npm ci
+      # npm ci fails if package.json and package-lock.json are out of sync.
+      # Dependency install scripts are disabled (.npmrc + flag).
+      - run: npm ci --ignore-scripts
 
-      # Build + tests run automatically via the package's "prepublishOnly" script.
+      # ignore-scripts=true also skips our own "prepublishOnly", so build and
+      # test explicitly before publishing.
+      - run: npm run build
+      - run: npm test
+
       # --provenance attaches a signed, publicly verifiable attestation binding the
       # package to this repo + workflow + commit (npm >= 9.5, bundled with Node 20).
-      - run: npm publish --provenance --access public
+      - run: npm publish --provenance --access public --ignore-scripts
