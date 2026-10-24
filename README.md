@@ -7,6 +7,16 @@ Claude / Cursor ──stdio──> mcp-whatsapp ──ws://localhost:7865──>
 Browser AI Agent ──navigator.modelContext──> KaptionAI Extension ──> WhatsApp Web (WebMCP)
 ```
 
+## Agent skill
+
+Teach Claude Code, Codex, Cursor and other agents how to use these tools well (search first, never send without confirming, reminders vs. scheduled messages, error handling):
+
+```bash
+npx skills add Kaption-AI/mcp-extension
+```
+
+The skill lives in [`skills/kaption-whatsapp/SKILL.md`](skills/kaption-whatsapp/SKILL.md).
+
 ## Setup
 
 ### 1. Install the extension
