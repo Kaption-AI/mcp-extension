@@ -17,5 +17,15 @@
         "type": "stdio"
       }
     }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.kaptionai.com/mcp"
+    },
+    {
+      "type": "sse",
+      "url": "https://mcp.kaptionai.com/sse"
+    }
   ]
 }
