@@ -25,7 +25,7 @@ describe('reported version', () => {
   it('the MCP server introduces itself with the package version, not a fixed one', () => {
     const { createMcpServer } = require('../mcpServer');
     const { getCurrentVersion } = require('../updateCheck');
-    const server = createMcpServer({ connected: false, sessions: () => [], call: jest.fn() } as any);
+    const server = createMcpServer({ connected: false, localSendAvailable: true, onAccountsChanged: () => {}, sessions: () => [], call: jest.fn() } as any);
     const info = (server as any).server._serverInfo;
     expect(info.version).toBe(getCurrentVersion());
   });

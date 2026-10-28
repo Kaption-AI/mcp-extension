@@ -18,6 +18,7 @@ export interface ExtensionInfo {
   isBusiness?: boolean;
   browser?: string;
   connected: boolean;
+  localSend?: boolean;
 }
 
 /**
@@ -36,6 +37,9 @@ export class RelayBridge implements ToolBridge {
   private _session: SessionInfo | null = null;
   private _extensions: ExtensionInfo[] = [];
   private authToken: string | null = null;
+  /** mcp.LOCAL_HUB.11 — as the hub broadcast it; true when it didn't say (older hubs). */
+  private _localSendAvailable = true;
+  private accountListeners: Array<() => void> = [];
 
   /** When promoted to hub, this holds the real bridge. */
   private hubBridge: Bridge | null = null;
@@ -52,6 +56,21 @@ export class RelayBridge implements ToolBridge {
 
   get extensions(): ExtensionInfo[] {
     return this._extensions;
+  }
+
+  get localSendAvailable(): boolean {
+    if (this.hubBridge) return this.hubBridge.localSendAvailable;
+    return this._localSendAvailable;
+  }
+
+  onAccountsChanged(listener: () => void): void {
+    this.accountListeners.push(listener);
+    this.hubBridge?.onAccountsChanged(listener);
+  }
+
+  private accountsChanged(params: any): void {
+    this._localSendAvailable = params?.localSendAvailable !== false;
+    for (const listener of this.accountListeners) listener();
   }
 
   async connect(url: string, token?: string): Promise<void> {
@@ -97,6 +116,7 @@ export class RelayBridge implements ToolBridge {
             const ext = this._extensions[0];
             this._session = { phone: ext.phone, pushname: ext.pushname, isBusiness: ext.isBusiness, browser: ext.browser };
           }
+          this.accountsChanged(msg.params);
           console.error(`[Kaption AI MCP] Relay connected (extensions: ${this._extensions.length})`);
           resolve();
           return;
@@ -112,6 +132,7 @@ export class RelayBridge implements ToolBridge {
           } else {
             this._session = null;
           }
+          this.accountsChanged(msg.params);
           console.error(`[Kaption AI MCP] Extensions: ${this._extensions.length}`);
           return;
         }
@@ -201,6 +222,8 @@ export class RelayBridge implements ToolBridge {
       const bridge = new Bridge();
       await createWebSocketServer(bridge, token, sessionManager);
       this.hubBridge = bridge;
+      for (const listener of this.accountListeners) bridge.onAccountsChanged(listener);
+      for (const listener of this.accountListeners) listener();
       console.error('[Kaption AI MCP] Promoted to hub mode — waiting for extension to reconnect');
     } catch (err: any) {
       // Another process beat us to it — reconnect as relay
