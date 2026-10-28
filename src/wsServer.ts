@@ -29,6 +29,8 @@ export interface ExtensionInfo {
   isBusiness?: boolean;
   browser?: string;
   connected: boolean;
+  /** mcp.LOCAL_HUB.11 — MCP_LOCAL_SEND as this account reported it; absent when it didn't say. */
+  localSend?: boolean;
 }
 
 /**
@@ -44,10 +46,11 @@ export function createWebSocketServer(
   bridge: Bridge,
   authToken: string,
   sessionManager: SessionManager,
+  port: number = WS_PORT,
 ): Promise<WebSocketServer> {
   return new Promise((resolve, reject) => {
     const wss = new WebSocketServer({
-      port: WS_PORT,
+      port,
       host: '127.0.0.1',
       verifyClient,
     });
@@ -64,6 +67,7 @@ export function createWebSocketServer(
           isBusiness: info.isBusiness,
           browser: info.browser,
           connected: true,
+          localSend: bridge.localSendOf(sessionId),
         });
       }
       return extensions;
@@ -74,7 +78,7 @@ export function createWebSocketServer(
       const extensions = getExtensionList();
       const msg = JSON.stringify({
         method: 'extension_status',
-        params: { connected: bridge.connected, extensions },
+        params: { connected: bridge.connected, extensions, localSendAvailable: bridge.localSendAvailable },
       });
       for (const client of relayClients) {
         if (client.readyState === WebSocket.OPEN) {
@@ -88,6 +92,8 @@ export function createWebSocketServer(
     // mcp.LOCAL_HUB.10 — 'connected' fires before the handshake names the account, so the list it
     // broadcasts is still missing it; send it again once the account is known.
     bridge.on('session', () => broadcastExtensionStatus());
+    // mcp.LOCAL_HUB.11 — relay clients hide or show the send tools with the hub.
+    bridge.on('features', () => broadcastExtensionStatus());
 
     wss.on('connection', (ws) => {
       // Connection timeout: close if no first message within 10s
@@ -118,7 +124,7 @@ export function createWebSocketServer(
     });
 
     wss.once('listening', () => {
-      console.error(`[Kaption AI MCP] WebSocket server listening on ws://127.0.0.1:${WS_PORT}`);
+      console.error(`[Kaption AI MCP] WebSocket server listening on ws://127.0.0.1:${port}`);
       resolve(wss);
     });
 
@@ -159,6 +165,7 @@ function handleRelayConnect(
     params: {
       extensionConnected: bridge.connected,
       extensions: getExtensionList(),
+      localSendAvailable: bridge.localSendAvailable,
     },
   }));
 
@@ -309,6 +316,10 @@ function startPairingFlow(
 }
 
 function handleExtensionMessage(bridge: Bridge, msg: any, sessionId: string): void {
+  // mcp.LOCAL_HUB.11 — before the session, so the 'session' broadcast already carries it.
+  if (msg.method === 'handshake' && msg.params?.features) {
+    bridge.setFeatures(sessionId, msg.params.features);
+  }
   // Capture session info from handshake
   if (msg.method === 'handshake' && msg.params?.session) {
     bridge.setSession(sessionId, msg.params.session);

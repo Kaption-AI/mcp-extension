@@ -21,6 +21,13 @@ export interface ToolCallResult {
 export interface ToolBridge {
   readonly connected: boolean;
   readonly session: SessionInfo | null;
+  /**
+   * mcp.LOCAL_HUB.11 — false only when every connected account reported `features.local_send: false`
+   * (MCP_LOCAL_SEND off). No account, or one that sent no `features` (older extensions), counts as available.
+   */
+  readonly localSendAvailable: boolean;
+  /** mcp.LOCAL_HUB.11 — called whenever the connected accounts or their features may have changed. */
+  onAccountsChanged(listener: () => void): void;
   callTool(method: string, params: Record<string, unknown>, targetSessionId?: string): Promise<ToolCallResult>;
 }
 
@@ -45,9 +52,20 @@ export class UnknownSessionError extends Error {
   }
 }
 
+export interface ExtensionFeatures {
+  /** mcp.LOCAL_HUB.11 — whether this account may send from this computer (MCP_LOCAL_SEND). */
+  local_send?: boolean;
+}
+
 interface ExtensionConnection {
   sendFn: SendFn;
   session: SessionInfo | null;
+  features: ExtensionFeatures | null;
+}
+
+/** mcp.LOCAL_HUB.11 — the send tools stay unless every account said no; unknown counts as yes. */
+export function localSendAvailableFor(accounts: Array<{ localSend?: boolean }>): boolean {
+  return accounts.length === 0 || accounts.some(a => a.localSend !== false);
 }
 
 /**
@@ -85,6 +103,28 @@ export class Bridge extends EventEmitter implements ToolBridge {
     return result;
   }
 
+  get localSendAvailable(): boolean {
+    return localSendAvailableFor([...this.connections.values()].map(c => ({ localSend: c.features?.local_send })));
+  }
+
+  /** mcp.LOCAL_HUB.11 — `features.local_send` of one account, if it said. */
+  localSendOf(sessionId: string): boolean | undefined {
+    return this.connections.get(sessionId)?.features?.local_send;
+  }
+
+  onAccountsChanged(listener: () => void): void {
+    for (const event of ['connected', 'disconnected', 'session', 'features']) this.on(event, listener);
+  }
+
+  /** mcp.LOCAL_HUB.11 — the handshake's `features` (only a boolean local_send is kept). */
+  setFeatures(sessionId: string, features: unknown): void {
+    const conn = this.connections.get(sessionId);
+    if (!conn || !features || typeof features !== 'object') return;
+    const localSend = (features as ExtensionFeatures).local_send;
+    conn.features = typeof localSend === 'boolean' ? { local_send: localSend } : {};
+    this.emit('features', sessionId);
+  }
+
   setSession(sessionId: string, info: SessionInfo): void {
     const conn = this.connections.get(sessionId);
     if (conn) {
@@ -99,7 +139,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
    * Set the WebSocket send function for an extension session.
    */
   setConnection(sessionId: string, sendFn: SendFn): void {
-    this.connections.set(sessionId, { sendFn, session: null });
+    this.connections.set(sessionId, { sendFn, session: null, features: null });
     this.lastActiveId = sessionId;
     this.emit('connected');
   }

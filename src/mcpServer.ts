@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import type { ToolBridge } from './bridge';
@@ -7,6 +7,9 @@ import { TOOLS } from './tools';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 
 const HTTP_API_PORT = 7866;
+
+/** mcp.LOCAL_HUB.11 — listed only while some connected account may send from this computer (MCP_LOCAL_SEND). */
+export const LOCAL_SEND_TOOLS = ['send_message', 'create_attachment_upload'];
 
 /**
  * Creates and configures the MCP server with all WhatsApp tools.
@@ -18,11 +21,12 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
     version: getCurrentVersion(),
   });
 
+  const sendTools: RegisteredTool[] = [];
   // Register each tool
   for (const tool of TOOLS) {
     const schema = tool.inputSchema;
     const shape = schema instanceof z.ZodObject ? schema.shape : {};
-    server.registerTool(
+    const registered = server.registerTool(
       tool.name,
       {
         description: tool.description,
@@ -138,7 +142,20 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
         }
       }
     );
+    if (LOCAL_SEND_TOOLS.includes(tool.name)) sendTools.push(registered);
   }
+
+  // mcp.LOCAL_HUB.11 — hide the send tools when every connected account reported MCP_LOCAL_SEND off;
+  // enable()/disable() send notifications/tools/list_changed to a connected client.
+  const syncSendTools = () => {
+    const available = bridge.localSendAvailable;
+    for (const t of sendTools) {
+      if (t.enabled === available) continue;
+      if (available) t.enable(); else t.disable();
+    }
+  };
+  syncSendTools();
+  bridge.onAccountsChanged(syncSendTools);
 
   return server;
 }
