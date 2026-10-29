@@ -386,7 +386,7 @@ Read WhatsApp call recordings made by the Kaption extension and their transcript
 
 ### `get_api_info`
 
-Get HTTP REST API connection info for programmatic access without MCP overhead. Returns URL, auth token, and available endpoints.
+Get HTTP REST API connection info for programmatic access without MCP overhead. Returns the URL, the available endpoints and where the auth token file is (`~/.kaptionai/mcp-auth-token`, readable only by your user). The token itself is never returned, so it never lands in a chat transcript.
 
 ## Multi-account support
 
@@ -416,7 +416,7 @@ When WebMCP is available, the extension registers tools prefixed with `kaption_`
 [BSL 1.1](./LICENSE) — free to use, converts to MIT after 4 years.
 
 
-### One-time attachments (owner-only MCP_LOCAL_SEND)
+### One-time attachments (when sending from this computer is on for the account)
 
 Use `create_attachment_upload({name,mime,size,target_session?})`, PUT the file bytes to
 its `uploadUrl` within 15 minutes, then send `attachment:{ref:attachmentRef}` within one
@@ -427,5 +427,5 @@ consumption, create a new upload. Maximum size: 8 MiB; image, document, audio or
 On this local hub, `attachment:{path:"/absolute/file.pdf"}` uploads automatically; optional
 `name` and `mime` override the filename/type. Paths must name regular files. The cloud
 relay and WebMCP do not accept paths. Arbitrary URLs are never accepted. Existing small
-inline `{name,mime,size,dataB64}` uploads continue to work. All sends still require the
-extension's owner-only flag, consent and ask-first rules. No assistant can accept consent.
+inline `{name,mime,size,dataB64}` uploads continue to work. All sends still require
+sending from this computer to be turned on for the account, consent and ask-first rules. No assistant can accept consent.

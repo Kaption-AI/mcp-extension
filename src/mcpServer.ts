@@ -5,6 +5,7 @@ import type { ToolBridge } from './bridge';
 import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
 import { TOOLS } from './tools';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
+import { getTokenFilePath } from './auth';
 
 const HTTP_API_PORT = 7866;
 
@@ -15,7 +16,30 @@ export const LOCAL_SEND_TOOLS = ['send_message', 'create_attachment_upload'];
  * Creates and configures the MCP server with all WhatsApp tools.
  * Uses stdio transport for communication with Claude Code / Cursor.
  */
-export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServer {
+/**
+ * mcp.LOCAL_HUB.12 — get_api_info never returns the hub's access token: the answer lands in the
+ * assistant's transcript (and anything that syncs it). It says where the token lives instead, so a
+ * local script run by the same user can read it from the 0600 file.
+ */
+export function apiInfo(): Record<string, unknown> {
+  return {
+    http_api: {
+      url: `http://127.0.0.1:${HTTP_API_PORT}`,
+      auth: {
+        header: 'Authorization: Bearer <token>',
+        token_file: getTokenFilePath(),
+        note: 'The token is not shown here on purpose. Read it from token_file on this computer (only your user can read it) and never paste it into a chat.',
+      },
+      endpoints: [
+        { method: 'GET', path: '/health', description: 'Connection status + session count' },
+        { method: 'GET', path: '/sessions', description: 'List all connected accounts' },
+        { method: 'POST', path: '/tools/:toolName', description: 'Call any tool (body = params JSON)' },
+      ],
+    },
+  };
+}
+
+export function createMcpServer(bridge: ToolBridge): McpServer {
   const server = new McpServer({
     name: 'kaptionai-whatsapp',
     version: getCurrentVersion(),
@@ -38,17 +62,7 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
           // mcp.LOCAL_HUB.5 — stdio MCP server registers all ten tools
           // Handle get_api_info locally (no extension needed)
           if (tool.name === 'get_api_info') {
-            const info = {
-              http_api: {
-                url: `http://127.0.0.1:${HTTP_API_PORT}`,
-                auth_token: authToken || null,
-                endpoints: [
-                  { method: 'GET', path: '/health', description: 'Connection status + session count' },
-                  { method: 'GET', path: '/sessions', description: 'List all connected accounts' },
-                  { method: 'POST', path: '/tools/:toolName', description: 'Call any tool (body = params JSON)' },
-                ],
-              },
-            };
+            const info = apiInfo();
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }],
             };
@@ -63,7 +77,7 @@ export function createMcpServer(bridge: ToolBridge, authToken?: string): McpServ
                     error: 'WhatsApp extension not connected',
                     reasons: [
                       'WhatsApp Web is not open in Chrome/Edge',
-                      'The KaptionAI extension is not installed or MCP bridge is not enabled',
+                      'The KaptionAI extension is not installed, or Claude and ChatGPT access is not turned on in it',
                       'The extension just started and hasn\'t connected yet (wait a few seconds and retry)',
                     ],
                     fix: 'Open WhatsApp Web (web.whatsapp.com) in Chrome/Edge with the KaptionAI extension, then retry.',
