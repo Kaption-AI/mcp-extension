@@ -196,7 +196,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
     const [sessionId, conn] = this.getConnection(targetSessionId);
     if (!conn) {
       throw new Error(
-        'Extension not connected. Make sure the KaptionAI Chrome extension is running with the MCP bridge feature enabled.'
+        'Extension not connected. Make sure the KaptionAI Chrome extension is running with Claude and ChatGPT access turned on.'
       );
     }
 

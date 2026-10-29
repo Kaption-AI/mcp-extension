@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   }
 
   // Create and start the MCP server (stdio)
-  const mcpServer = createMcpServer(toolBridge, authToken);
+  const mcpServer = createMcpServer(toolBridge);
   await startMcpServer(mcpServer);
 
   // Handle graceful shutdown
