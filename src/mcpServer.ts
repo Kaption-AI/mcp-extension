@@ -2,6 +2,7 @@ import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import type { ToolBridge } from './bridge';
+import { clientNameOf } from './clientName';
 import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
 import { TOOLS } from './tools';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
@@ -116,7 +117,10 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           const forwardParams = { ...params };
           delete forwardParams.target_session;
 
-          const { data, source } = await bridge.callTool(tool.name, forwardParams, targetSession);
+          // mcp-usage-accounting.LOCAL.3 — the AI app's name from MCP initialize (clientInfo.name) goes
+          // beside the request, never inside the tool arguments.
+          const clientName = clientNameOf(server.server.getClientVersion()?.name);
+          const { data, source } = await bridge.callTool(tool.name, forwardParams, targetSession, clientName);
 
           const sourceInfo = source?.sessionId ? {
             sessionId: source.sessionId,

@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import { Bridge, UnknownSessionError } from './bridge';
+import { clientNameOf } from './clientName';
 import { validateToken, SessionManager } from './auth';
 
 const WS_PORT = 7865;
@@ -180,7 +181,8 @@ function handleRelayConnect(
     // Forward tool calls through the bridge to the extension
     if (parsed.id && parsed.method) {
       const targetSession = parsed.params?.target_session;
-      bridge.callTool(parsed.method, parsed.params || {}, targetSession)
+      // mcp-usage-accounting.LOCAL.3 — a relay client's AI app name travels on to the extension.
+      bridge.callTool(parsed.method, parsed.params || {}, targetSession, clientNameOf(parsed.client?.name))
         .then((result) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ jsonrpc: '2.0', id: parsed.id, result }));
