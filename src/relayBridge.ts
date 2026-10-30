@@ -1,6 +1,7 @@
 import { resolveLocalAttachment } from './attachment';
 import WebSocket from 'ws';
 import { Bridge, UnknownSessionError } from './bridge';
+import { toolRequest } from './clientName';
 import type { ToolBridge, ToolCallResult, SessionInfo } from './bridge';
 import { createWebSocketServer } from './wsServer';
 import { loadOrCreateToken, SessionManager } from './auth';
@@ -173,10 +174,10 @@ export class RelayBridge implements ToolBridge {
     });
   }
 
-  async callTool(method: string, params: Record<string, unknown>, targetSessionId?: string): Promise<ToolCallResult> {
+  async callTool(method: string, params: Record<string, unknown>, targetSessionId?: string, clientName?: string): Promise<ToolCallResult> {
     // If promoted to hub, delegate to the real bridge
     if (this.hubBridge) {
-      return this.hubBridge.callTool(method, params, targetSessionId);
+      return this.hubBridge.callTool(method, params, targetSessionId, clientName);
     }
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -184,7 +185,7 @@ export class RelayBridge implements ToolBridge {
     }
 
     if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => {
-      const slot = await this.callTool('create_attachment_upload', metadata, targetSessionId);
+      const slot = await this.callTool('create_attachment_upload', metadata, targetSessionId, clientName);
       targetSessionId = slot.source?.sessionId ?? targetSessionId;
       return slot.data;
     });
@@ -204,7 +205,8 @@ export class RelayBridge implements ToolBridge {
       this.pendingRequests.set(id, { resolve, reject, timeout });
 
       try {
-        this.ws!.send(JSON.stringify({ jsonrpc: '2.0', id, method, params: sendParams }));
+        // mcp-usage-accounting.LOCAL.3 — the hub passes `client` on to the extension.
+        this.ws!.send(JSON.stringify(toolRequest(id, method, sendParams, clientName)));
       } catch (err) {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);

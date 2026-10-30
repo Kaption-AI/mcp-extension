@@ -1,3 +1,4 @@
+import { toolRequest } from './clientName';
 import { resolveLocalAttachment } from './attachment';
 import { EventEmitter } from 'events';
 
@@ -28,7 +29,11 @@ export interface ToolBridge {
   readonly localSendAvailable: boolean;
   /** mcp.LOCAL_HUB.11 — called whenever the connected accounts or their features may have changed. */
   onAccountsChanged(listener: () => void): void;
-  callTool(method: string, params: Record<string, unknown>, targetSessionId?: string): Promise<ToolCallResult>;
+  /**
+   * mcp-usage-accounting.LOCAL.3 — `clientName` is the AI app's MCP `initialize` clientInfo.name; it travels
+   * beside method/params (never inside params) so the extension can count local calls per app.
+   */
+  callTool(method: string, params: Record<string, unknown>, targetSessionId?: string, clientName?: string): Promise<ToolCallResult>;
 }
 
 interface PendingRequest {
@@ -189,6 +194,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
     method: string,
     params: Record<string, unknown>,
     targetSessionId?: string,
+    clientName?: string,
   ): Promise<ToolCallResult> {
     if (targetSessionId && !this.connections.has(targetSessionId)) {
       throw new UnknownSessionError(targetSessionId, [...this.connections.keys()]);
@@ -200,7 +206,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
       );
     }
 
-    if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => (await this.callTool('create_attachment_upload', metadata, sessionId ?? undefined)).data);
+    if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => (await this.callTool('create_attachment_upload', metadata, sessionId ?? undefined, clientName)).data);
     const id = `req_${++this.requestCounter}`;
 
     const data = await new Promise((resolve, reject) => {
@@ -211,12 +217,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
 
       this.pendingRequests.set(id, { resolve, reject, timeout, connectionId: sessionId });
 
-      const request = JSON.stringify({
-        jsonrpc: '2.0',
-        id,
-        method,
-        params,
-      });
+      const request = JSON.stringify(toolRequest(id, method, params, clientName));
 
       try {
         conn.sendFn(request);
