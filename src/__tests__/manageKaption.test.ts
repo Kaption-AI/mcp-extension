@@ -81,7 +81,10 @@ async function connectClient(bridge: Bridge | RelayBridge) {
 
 describe('mcp-manage-kaption.LIST.2 definitions', () => {
   it('are the canonical ones, verbatim, after every other tool', async () => {
-    expect(TOOLS.slice(-canonical.length).map(t => t.name)).toEqual(canonical.map(t => t.name));
+    // The status tools (scheduled-status.MCP) follow the manage block.
+    const names = TOOLS.map(t => t.name);
+    expect(names.slice(-2)).toEqual(['manage_status', 'list_status_posts']);
+    expect(names.slice(-canonical.length - 2, -2)).toEqual(canonical.map(t => t.name));
     const bridge = new Bridge();
     fakeExtension(bridge, 'sess_owner', { manage_kaption: true, business_agent: true, plans: true });
     const { client } = await connectClient(bridge);
@@ -113,6 +116,11 @@ describe('mcp-manage-kaption.LIST.2 visibility follows the connected accounts\' 
     expect([...visibleManageTools([{ business_agent: true }])]).toEqual(['get_business_agent', 'manage_business_agent']);
     expect([...visibleManageTools([{ plans: true }])]).toEqual(['kaption_plans', 'create_kaption_checkout_link']);
     expect(readManageFeatures({ manage_kaption: 'yes', plans: 1, business_agent: true, other: true })).toEqual({ business_agent: true });
+    // scheduled-status.MCP — the status tools follow their own key.
+    expect([...visibleManageTools([{ scheduled_status: true }])]).toEqual(['manage_status', 'list_status_posts']);
+    expect([...visibleManageTools([{ manage_kaption: true, business_agent: true, plans: true }])]).not.toContain('manage_status');
+    expect(readManageFeatures({ scheduled_status: true })).toEqual({ scheduled_status: true });
+    expect(readManageFeatures({ scheduled_status: 'true' })).toEqual({});
   });
 
   it('hidden until an account says true; list_changed on every change', async () => {
@@ -340,5 +348,56 @@ describe('mcp-manage-kaption.LIST.1 over the hub\'s WebSocket', () => {
     ext.close(); relay.close();
     await flush();
     await new Promise(r => wss.close(r));
+  });
+});
+
+describe('scheduled-status.MCP the status tools on the hub', () => {
+  it('hidden for an older extension (no scheduled_status) and when it is false; listed when true', async () => {
+    const bridge = new Bridge();
+    const mcp = await connectClient(bridge);
+    fakeExtension(bridge, 'sess_old', { local_send: true, manage_kaption: true });
+    fakeExtension(bridge, 'sess_off', { scheduled_status: false });
+    await flush();
+    expect(await mcp.names()).not.toContain('manage_status');
+    expect(await mcp.names()).not.toContain('list_status_posts');
+    fakeExtension(bridge, 'sess_owner', { scheduled_status: true });
+    await flush();
+    const tools = (await mcp.client.listTools()).tools;
+    const manage = tools.find(t => t.name === 'manage_status')!;
+    const list = tools.find(t => t.name === 'list_status_posts')!;
+    expect((manage.inputSchema.properties as any).action.enum).toEqual(['schedule', 'cancel']);
+    expect(manage.annotations).toEqual({ title: 'Schedule a WhatsApp status', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
+    expect(list.annotations).toEqual({ title: 'List status posts', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(manage.description).not.toMatch(/post_now/);
+    await mcp.client.close();
+  });
+
+  it('forwards to the account that said scheduled_status; list goes as manage_status list; post_now is refused', async () => {
+    const bridge = new Bridge();
+    const owner = fakeExtension(bridge, 'sess_owner', { scheduled_status: true });
+    const other = fakeExtension(bridge, 'sess_other', { manage_kaption: true }); // most recently active
+    const mcp = await connectClient(bridge);
+    const listed: any = await mcp.client.callTool({ name: 'list_status_posts', arguments: { filter: 'all' } });
+    expect(listed.isError).toBeFalsy();
+    const cancelled: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'cancel', id: 's1' } });
+    expect(cancelled.isError).toBeFalsy();
+    const now: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'post_now', text: 'Hi' } });
+    expect(now.isError).toBe(true);
+    expect(owner).toEqual([
+      { method: 'manage_status', params: { filter: 'all', action: 'list' } },
+      { method: 'manage_status', params: { action: 'cancel', id: 's1' } },
+    ]);
+    expect(other).toEqual([]);
+    await mcp.client.close();
+  });
+
+  it('a hidden status tool never reaches the extension', async () => {
+    const bridge = new Bridge();
+    const calls = fakeExtension(bridge, 'sess_a', { manage_kaption: true });
+    const mcp = await connectClient(bridge);
+    const res: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'cancel', id: 's1' } });
+    expect(res.isError).toBe(true);
+    expect(calls).toEqual([]);
+    await mcp.client.close();
   });
 });
