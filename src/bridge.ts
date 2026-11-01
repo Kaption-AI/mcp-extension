@@ -1,5 +1,6 @@
 import { resolveLocalAttachment } from './attachment';
 import { EventEmitter } from 'events';
+import { readManageFeatures, type ManageFeatures } from './manageKaption';
 
 export interface SessionInfo {
   phone?: string;
@@ -26,6 +27,13 @@ export interface ToolBridge {
    * (MCP_LOCAL_SEND off). No account, or one that sent no `features` (older extensions), counts as available.
    */
   readonly localSendAvailable: boolean;
+  /**
+   * mcp-manage-kaption.LIST.2 — the manage families each connected account said it may use (one entry per account;
+   * an account that said nothing is an empty object).
+   */
+  readonly manageFeatures: ManageFeatures[];
+  /** mcp-manage-kaption.LIST.2 — an account that said this family is on (the most recently active first). */
+  sessionWithFeature(key: keyof ManageFeatures): string | undefined;
   /** mcp.LOCAL_HUB.11 — called whenever the connected accounts or their features may have changed. */
   onAccountsChanged(listener: () => void): void;
   callTool(method: string, params: Record<string, unknown>, targetSessionId?: string): Promise<ToolCallResult>;
@@ -52,7 +60,7 @@ export class UnknownSessionError extends Error {
   }
 }
 
-export interface ExtensionFeatures {
+export interface ExtensionFeatures extends ManageFeatures {
   /** mcp.LOCAL_HUB.11 — whether this account may send from this computer (MCP_LOCAL_SEND). */
   local_send?: boolean;
 }
@@ -112,16 +120,34 @@ export class Bridge extends EventEmitter implements ToolBridge {
     return this.connections.get(sessionId)?.features?.local_send;
   }
 
+  get manageFeatures(): ManageFeatures[] {
+    return [...this.connections.values()].map(c => readManageFeatures(c.features));
+  }
+
+  /** mcp-manage-kaption.LIST.2 — the manage families one account said (empty when it said nothing). */
+  manageFeaturesOf(sessionId: string): ManageFeatures {
+    return readManageFeatures(this.connections.get(sessionId)?.features);
+  }
+
+  sessionWithFeature(key: keyof ManageFeatures): string | undefined {
+    if (this.lastActiveId && this.connections.get(this.lastActiveId)?.features?.[key] === true) return this.lastActiveId;
+    for (const [id, conn] of this.connections) if (conn.features?.[key] === true) return id;
+    return undefined;
+  }
+
   onAccountsChanged(listener: () => void): void {
     for (const event of ['connected', 'disconnected', 'session', 'features']) this.on(event, listener);
   }
 
-  /** mcp.LOCAL_HUB.11 — the handshake's `features` (only a boolean local_send is kept). */
+  /**
+   * mcp.LOCAL_HUB.11, mcp-manage-kaption.LIST.1 — the handshake's `features`: only booleans of local_send,
+   * manage_kaption, business_agent and plans are kept.
+   */
   setFeatures(sessionId: string, features: unknown): void {
     const conn = this.connections.get(sessionId);
     if (!conn || !features || typeof features !== 'object') return;
     const localSend = (features as ExtensionFeatures).local_send;
-    conn.features = typeof localSend === 'boolean' ? { local_send: localSend } : {};
+    conn.features = { ...(typeof localSend === 'boolean' ? { local_send: localSend } : {}), ...readManageFeatures(features) };
     this.emit('features', sessionId);
   }
 

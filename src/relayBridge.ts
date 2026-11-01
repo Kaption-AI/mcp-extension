@@ -4,6 +4,7 @@ import { Bridge, UnknownSessionError } from './bridge';
 import type { ToolBridge, ToolCallResult, SessionInfo } from './bridge';
 import { createWebSocketServer } from './wsServer';
 import { loadOrCreateToken, SessionManager } from './auth';
+import { readManageFeatures, type ManageFeatures } from './manageKaption';
 
 interface PendingRequest {
   resolve: (result: ToolCallResult) => void;
@@ -19,6 +20,8 @@ export interface ExtensionInfo {
   browser?: string;
   connected: boolean;
   localSend?: boolean;
+  /** mcp-manage-kaption.LIST.2 — as the hub reported it; absent from older hubs (the tools stay hidden). */
+  features?: ManageFeatures;
 }
 
 /**
@@ -61,6 +64,16 @@ export class RelayBridge implements ToolBridge {
   get localSendAvailable(): boolean {
     if (this.hubBridge) return this.hubBridge.localSendAvailable;
     return this._localSendAvailable;
+  }
+
+  get manageFeatures(): ManageFeatures[] {
+    if (this.hubBridge) return this.hubBridge.manageFeatures;
+    return this._extensions.map(e => readManageFeatures(e.features));
+  }
+
+  sessionWithFeature(key: keyof ManageFeatures): string | undefined {
+    if (this.hubBridge) return this.hubBridge.sessionWithFeature(key);
+    return this._extensions.find(e => readManageFeatures(e.features)[key] === true)?.sessionId;
   }
 
   onAccountsChanged(listener: () => void): void {

@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import { Bridge, UnknownSessionError } from './bridge';
 import { validateToken, SessionManager } from './auth';
+import type { ManageFeatures } from './manageKaption';
 
 const WS_PORT = 7865;
 const CONNECTION_TIMEOUT_MS = 10_000;
@@ -31,6 +32,8 @@ export interface ExtensionInfo {
   connected: boolean;
   /** mcp.LOCAL_HUB.11 — MCP_LOCAL_SEND as this account reported it; absent when it didn't say. */
   localSend?: boolean;
+  /** mcp-manage-kaption.LIST.2 — the manage families this account said (relay clients list the tools from these). */
+  features?: ManageFeatures;
 }
 
 /**
@@ -68,6 +71,7 @@ export function createWebSocketServer(
           browser: info.browser,
           connected: true,
           localSend: bridge.localSendOf(sessionId),
+          features: bridge.manageFeaturesOf(sessionId),
         });
       }
       return extensions;
@@ -92,7 +96,7 @@ export function createWebSocketServer(
     // mcp.LOCAL_HUB.10 — 'connected' fires before the handshake names the account, so the list it
     // broadcasts is still missing it; send it again once the account is known.
     bridge.on('session', () => broadcastExtensionStatus());
-    // mcp.LOCAL_HUB.11 — relay clients hide or show the send tools with the hub.
+    // mcp.LOCAL_HUB.11, mcp-manage-kaption.LIST.2 — relay clients hide or show the send and manage tools with the hub.
     bridge.on('features', () => broadcastExtensionStatus());
 
     wss.on('connection', (ws) => {

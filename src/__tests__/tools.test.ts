@@ -3,8 +3,8 @@ import { TOOLS, TOOL_ROUTES, getToolByName, getToolsForMCP, routeToolCall } from
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 27 tools', () => {
-      expect(TOOLS).toHaveLength(27);
+    it('should contain all 36 tools', () => {
+      expect(TOOLS).toHaveLength(36);
     });
 
     it('should have unique tool names', () => {
@@ -85,7 +85,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(27);
+      expect(mcpTools).toHaveLength(36);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -343,10 +343,11 @@ describe('tools', () => {
       for (const tool of mcpTools) {
         const props = tool.inputSchema.properties as Record<string, any>;
         for (const [key, prop] of Object.entries(props)) {
-          // Properties use either `type` (simple) or `oneOf` (union)
+          // Properties use either `type` (simple) or `oneOf` (union); kaption_settings.value takes any JSON value
           const hasType = prop.type !== undefined;
           const hasOneOf = prop.oneOf !== undefined;
-          expect(hasType || hasOneOf).toBe(true);
+          const anyValue = tool.name === 'update_kaption_settings' && key === 'value';
+          expect(hasType || hasOneOf || anyValue).toBe(true);
           if (hasType) {
             expect(['string', 'number', 'boolean', 'object', 'array'].includes(prop.type)).toBe(true);
           }
