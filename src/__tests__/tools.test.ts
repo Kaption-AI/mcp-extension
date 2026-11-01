@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { TOOLS, getToolByName, getToolsForMCP } from '../tools';
+import { TOOLS, TOOL_ROUTES, getToolByName, getToolsForMCP, routeToolCall } from '../tools';
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 20 tools', () => {
-      expect(TOOLS).toHaveLength(20);
+    it('should contain all 27 tools', () => {
+      expect(TOOLS).toHaveLength(27);
     });
 
     it('should have unique tool names', () => {
@@ -32,6 +32,13 @@ describe('tools', () => {
       'get_api_info',
       'get_analytics',
       'call_recordings',
+      'list_reminders',
+      'get_reminder',
+      'list_scheduled_messages',
+      'get_scheduled_message',
+      'list_chat_lists',
+      'get_chat_list',
+      'get_contact_note',
     ];
 
     it.each(expectedTools)('should include tool: %s', (name) => {
@@ -78,7 +85,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(20);
+      expect(mcpTools).toHaveLength(27);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -259,19 +266,19 @@ describe('tools', () => {
       expect(schema.required).toContain('contact_id');
     });
 
-    it('should have action enum with get and set', () => {
-      expect(schema.properties.action.enum).toEqual(['get', 'set']);
+    // mcp.TOOLS.19 — write-only; reading a note is get_contact_note
+    it('should have action enum with set only', () => {
+      expect(schema.properties.action.enum).toEqual(['set']);
     });
 
-    it('should have optional note param', () => {
-      expect(schema.properties.note).toBeDefined();
-      expect(schema.required).not.toContain('note');
+    it('should require the note', () => {
+      expect(schema.required).toContain('note');
     });
 
-    it('should validate get action', () => {
+    it('should refuse the get action', () => {
       const tool = getToolByName('manage_notes')!;
       const result = tool.inputSchema.safeParse({ action: 'get', contact_id: '123@c.us' });
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
 
     it('should validate set action with note', () => {
@@ -365,18 +372,19 @@ describe('tools', () => {
     const parse = (input: Record<string, unknown>) => tool.inputSchema.safeParse(input);
 
     it('takes mode "bot" or "local", optional (the bot stays the default)', () => {
-      expect(parse({ action: 'list' }).success).toBe(true);
-      expect(parse({ action: 'list', mode: 'bot' }).success).toBe(true);
-      expect(parse({ action: 'list', mode: 'local' }).success).toBe(true);
-      expect(parse({ action: 'list', mode: 'cloud' }).success).toBe(false);
+      expect(parse({ action: 'delete', id: 'm' }).success).toBe(true);
+      expect(parse({ action: 'delete', id: 'm', mode: 'bot' }).success).toBe(true);
+      expect(parse({ action: 'delete', id: 'm', mode: 'local' }).success).toBe(true);
+      expect(parse({ action: 'delete', id: 'm', mode: 'cloud' }).success).toBe(false);
       const parsed = parse({ action: 'create', mode: 'local', message: 'Hi', datetime: '2026-10-01T09:00:00Z', conversation_id: '120363000000000000@g.us' });
       expect(parsed.success && parsed.data).toMatchObject({ mode: 'local', conversation_id: '120363000000000000@g.us' });
     });
 
-    it('keeps the bot actions and adds cancel, remove and send_now', () => {
-      for (const action of ['list', 'get', 'create', 'update', 'delete', 'cancel', 'remove', 'send_now']) {
+    it('writes only (mcp.TOOLS.19): create, update, delete, cancel, remove and send_now', () => {
+      for (const action of ['create', 'update', 'delete', 'cancel', 'remove', 'send_now']) {
         expect(parse({ action }).success).toBe(true);
       }
+      for (const action of ['list', 'get']) expect(parse({ action }).success).toBe(false);
       expect(parse({ action: 'consent' }).success).toBe(false);
     });
 
@@ -413,7 +421,7 @@ describe('tools', () => {
     const tool = getToolByName('call_recordings')!;
 
     it('reads only: list, get and search', () => {
-      expect(tool.annotations).toEqual({ readOnlyHint: true, openWorldHint: false });
+      expect(tool.annotations).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
       expect(tool.inputSchema.safeParse({ action: 'list' }).success).toBe(true);
       expect(tool.inputSchema.safeParse({ action: 'delete' }).success).toBe(false);
     });
@@ -445,5 +453,30 @@ describe('mcp-local-send schemas', () => {
   });
   it('marks sending as a non-idempotent write', () => {
     expect(send.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false });
+  });
+
+  // mcp.TOOLS.19 — reads and writes are separate tools; the reads reach the extension as manage_* calls.
+  describe('read-only tools', () => {
+    it('route to the manage_* method and action every Kaption version answers', () => {
+      expect(routeToolCall('list_reminders', { filter: 'all' })).toEqual({ method: 'manage_reminders', params: { filter: 'all', action: 'list' } });
+      expect(routeToolCall('get_scheduled_message', { id: 'm', mode: 'local' })).toEqual({ method: 'manage_scheduled_messages', params: { id: 'm', mode: 'local', action: 'get' } });
+      expect(routeToolCall('list_chat_lists', {})).toEqual({ method: 'manage_lists', params: { action: 'list' } });
+      expect(routeToolCall('get_contact_note', { contact_id: 'a@c.us' })).toEqual({ method: 'manage_notes', params: { contact_id: 'a@c.us', action: 'get' } });
+      expect(routeToolCall('query', { entity: 'session' })).toEqual({ method: 'query', params: { entity: 'session' } });
+    });
+
+    it('every tool has a title and both safety hints', () => {
+      for (const tool of getToolsForMCP()) {
+        expect(tool.title).toBeTruthy();
+        expect(typeof tool.annotations?.readOnlyHint).toBe('boolean');
+        expect(typeof tool.annotations?.destructiveHint).toBe('boolean');
+      }
+    });
+
+    it('every routed tool is read-only', () => {
+      for (const name of Object.keys(TOOL_ROUTES)) {
+        expect(getToolByName(name)!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+      }
+    });
   });
 });

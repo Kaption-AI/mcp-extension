@@ -231,12 +231,14 @@ Manage WhatsApp Business labels — add, remove, create, or delete labels.
 
 Manage personal chat lists (custom lists). The personal account equivalent of Business labels — organize chats into custom categories.
 
-```
-# List all custom lists
-manage_lists { action: "list" }
+Reading them is `list_chat_lists` / `get_chat_list` (read-only tools).
 
-# Get a list with its chats
-manage_lists { action: "get", name: "Family" }
+```
+# List all custom lists (read-only tool)
+list_chat_lists {}
+
+# Get a list with its chats (read-only tool)
+get_chat_list { name: "Family" }
 
 # Create a new list
 manage_lists { action: "create", name: "Work", conversation_id: "5511999887766@c.us" }
@@ -253,7 +255,7 @@ manage_lists { action: "delete", name: "Old List" }
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `action` | string | `list`, `get`, `create`, `edit`, `delete`, `add_chat`, `remove_chat` |
+| `action` | string | `create`, `edit`, `delete`, `add_chat`, `remove_chat` |
 | `id` | string | List ID |
 | `name` | string | List name (for create/edit, or to resolve by name) |
 | `conversation_id` | string | Chat ID(s) to add/remove |
@@ -288,11 +290,12 @@ manage_chat { action: "set_draft", conversation_id: "5511999887766@c.us", text: 
 
 ### `manage_reminders`
 
-Create and manage personal reminders. Stored in the cloud and delivered via the Kaption extension.
+Create, change, complete or delete personal reminders. Stored in the cloud and delivered via the Kaption extension.
+Reading them is `list_reminders` / `get_reminder` (read-only tools).
 
 ```
-# List active reminders
-manage_reminders { action: "list" }
+# List active reminders (read-only tool)
+list_reminders {}
 
 # Create a reminder
 manage_reminders { action: "create", title: "Follow up with client", datetime: "2026-03-07T14:00:00Z" }
@@ -301,14 +304,13 @@ manage_reminders { action: "create", title: "Follow up with client", datetime: "
 manage_reminders { action: "complete", id: "rem_abc123" }
 
 # List all including completed
-manage_reminders { action: "list", filter: "all" }
+list_reminders { filter: "all" }
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `action` | string | `list`, `get`, `create`, `update`, `delete`, `complete`, `uncomplete` |
-| `filter` | string | For list: `active` (default), `completed`, `all` |
-| `id` | string | Reminder ID (for get/update/delete/complete/uncomplete) |
+| `action` | string | `create`, `update`, `delete`, `complete`, `uncomplete` |
+| `id` | string | Reminder ID (for update/delete/complete/uncomplete) |
 | `title` | string | Reminder text (max 800 chars, no newlines) |
 | `datetime` | string | ISO 8601 datetime |
 | `notification_type` | string | `extension`, `whatsapp`, or `automatic` (default) |
@@ -322,9 +324,11 @@ Schedule messages to be sent automatically at a specific time, in one of two mod
 
 The local mode has to be turned on by you in Kaption first (the "From this computer" option in the scheduling picker, after reading the limits and risks). An AI assistant can't turn it on; until you do, local requests are refused with `(reason: no-consent)`. It is also rolled out gradually: where it isn't available yet, local requests are refused with `(reason: flag-off)` and the bot works as before.
 
+Reading them is `list_scheduled_messages` / `get_scheduled_message` (read-only tools).
+
 ```
-# List pending messages of both modes (each one has a "mode")
-manage_scheduled_messages { action: "list" }
+# List pending messages of both modes (each one has a "mode") — read-only tool
+list_scheduled_messages {}
 
 # Schedule with the Kaption bot
 manage_scheduled_messages { action: "create", message: "Hey, just following up!", datetime: "2026-03-07T09:00:00Z", conversation_id: "5511999887766@c.us" }
@@ -340,10 +344,9 @@ manage_scheduled_messages { action: "cancel", mode: "local", id: "3f2c…" }
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `action` | string | `list`, `get`, `create`, `update`, `delete`; with `mode: "local"` also `cancel`, `remove` (a finished one), `send_now` (a missed or failed one) |
-| `mode` | string | `bot` (default) or `local`. For `list`, omit to get both modes |
-| `filter` | string | For list: `pending` (default), `sent`, `all` |
-| `id` | string | Scheduled message ID (for get/update/delete/cancel/remove/send_now) |
+| `action` | string | `create`, `update`, `delete`; with `mode: "local"` also `cancel`, `remove` (a finished one), `send_now` (a missed or failed one) |
+| `mode` | string | `bot` (default) or `local` |
+| `id` | string | Scheduled message ID (for update/delete/cancel/remove/send_now) |
 | `conversation_id` | string | Chat to send to (for create): a person, or a group with `mode: "local"` |
 | `message` | string | Message text. Bot: max 800 chars, no newlines. Local: up to 2000 chars |
 | `datetime` | string | ISO 8601 datetime when the message should be sent |
@@ -362,13 +365,29 @@ Returns base64-encoded media data with mimetype, size, duration, and caption.
 
 ### `manage_notes`
 
-Read and write contact notes (WhatsApp Business).
+Write a contact's note (WhatsApp Business). Reading it is `get_contact_note { contact_id }` (read-only tool).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `action` | string | `get`, `set` |
+| `action` | string | `set` |
 | `contact_id` | string | The contact ID |
-| `note` | string | Note text (required for `set`) |
+| `note` | string | Note text |
+
+### Read-only tools
+
+Claude's and Google's connector reviews require reads and writes in separate tools, so each `manage_*` tool only
+writes and these tools read (each carries `readOnlyHint: true`). The hub sends them to the extension as the matching
+`manage_*` call, so every Kaption version answers them.
+
+| Tool | Reads | Parameters |
+|------|-------|------------|
+| `list_reminders` | Personal reminders | `filter`: `active` (default), `completed`, `all` |
+| `get_reminder` | One reminder | `id` |
+| `list_scheduled_messages` | Scheduled messages, both modes | `mode` (omit for both), `filter`: `pending` (default), `sent`, `all` |
+| `get_scheduled_message` | One scheduled message | `id`, `mode` |
+| `list_chat_lists` | Custom chat lists (personal accounts) | — |
+| `get_chat_list` | One list and its chats | `id` or `name` |
+| `get_contact_note` | A contact's note (Business accounts) | `contact_id` |
 
 ### `call_recordings`
 
