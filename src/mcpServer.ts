@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import type { ToolBridge } from './bridge';
 import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
-import { TOOLS } from './tools';
+import { TOOLS, routeToolCall } from './tools';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 import { getTokenFilePath } from './auth';
 
@@ -53,6 +53,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     const registered = server.registerTool(
       tool.name,
       {
+        title: tool.title,
         description: tool.description,
         inputSchema: shape,
         annotations: tool.annotations ?? {},
@@ -116,7 +117,9 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           const forwardParams = { ...params };
           delete forwardParams.target_session;
 
-          const { data, source } = await bridge.callTool(tool.name, forwardParams, targetSession);
+          // mcp.TOOLS.19 — a read-only tool reaches the extension as its manage_* method and action.
+          const routed = routeToolCall(tool.name, forwardParams);
+          const { data, source } = await bridge.callTool(routed.method, routed.params, targetSession);
 
           const sourceInfo = source?.sessionId ? {
             sessionId: source.sessionId,
