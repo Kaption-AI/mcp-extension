@@ -3,8 +3,8 @@ import { TOOLS, TOOL_ROUTES, getToolByName, getToolsForMCP, routeToolCall } from
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 36 tools', () => {
-      expect(TOOLS).toHaveLength(36);
+    it('should contain all 38 tools', () => {
+      expect(TOOLS).toHaveLength(38);
     });
 
     it('should have unique tool names', () => {
@@ -85,13 +85,20 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(36);
+      expect(mcpTools).toHaveLength(38);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
         expect(tool.description).toBeTruthy();
         expect(tool.inputSchema).toBeDefined();
         expect(tool.inputSchema.type).toBe('object');
+      }
+    });
+
+    it('gives every tool its title in annotations.title (Connectors Directory)', () => {
+      for (const tool of getToolsForMCP()) {
+        expect(tool.annotations?.title).toBeTruthy();
+        expect(tool.annotations?.title).toBe(tool.title);
       }
     });
 
@@ -405,7 +412,7 @@ describe('tools', () => {
     });
 
     it('stays a destructive, open-world write tool', () => {
-      expect(tool.annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
+      expect(tool.annotations).toEqual({ title: 'Manage scheduled messages', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
     });
 
     it('describes mode in the JSON Schema', () => {
@@ -422,7 +429,7 @@ describe('tools', () => {
     const tool = getToolByName('call_recordings')!;
 
     it('reads only: list, get and search', () => {
-      expect(tool.annotations).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+      expect(tool.annotations).toEqual({ title: 'Read call recordings', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
       expect(tool.inputSchema.safeParse({ action: 'list' }).success).toBe(true);
       expect(tool.inputSchema.safeParse({ action: 'delete' }).success).toBe(false);
     });
