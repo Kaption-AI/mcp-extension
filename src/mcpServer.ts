@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import type { ToolBridge } from './bridge';
 import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
+import { takeUsageNotice } from './usageNotice';
 import { TOOLS, routeToolCall, type ToolDefinition } from './tools';
 import {
   installManageResources,
@@ -134,7 +135,9 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           const routedSession = targetSession ?? (feature ? bridge.sessionWithFeature?.(feature) : undefined);
           const called = await bridge.callTool(routed.method, routed.params, routedSession);
           const source = called.source;
-          const data = feature ? parseAnswer(called.data) : called.data;
+          // mcp-usage-pricing.RELAY.1 — a usage warning from the extension becomes its own line after the result.
+          const marked = takeUsageNotice(feature ? parseAnswer(called.data) : called.data);
+          const data = marked.result;
 
           const sourceInfo = source?.sessionId ? {
             sessionId: source.sessionId,
@@ -159,6 +162,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
                 type: 'text' as const,
                 text: JSON.stringify(response, null, 2),
               },
+              ...(marked.notice ? [{ type: 'text' as const, text: marked.notice }] : []),
             ],
             ...(structuredContent ? { structuredContent } : {}),
           };
