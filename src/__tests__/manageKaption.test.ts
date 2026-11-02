@@ -391,6 +391,32 @@ describe('scheduled-status.MCP the status tools on the hub', () => {
     await mcp.client.close();
   });
 
+  it('scheduled-status.MCP.9 a photo by upload ref goes to the extension as { ref }; inline still works; other files are refused here', async () => {
+    const bridge = new Bridge();
+    const owner = fakeExtension(bridge, 'sess_owner', { scheduled_status: true });
+    const mcp = await connectClient(bridge);
+    const manage = (await mcp.client.listTools()).tools.find(t => t.name === 'manage_status')!;
+    expect(manage.description).toMatch(/create_attachment_upload.*PUT the raw file bytes.*attachment: \{ ref: attachmentRef \}/s);
+    expect(manage.description!.indexOf('{ ref')).toBeLessThan(manage.description!.indexOf('{ name, mime, dataB64 }'));
+    const attachment = (manage.inputSchema.properties as any).attachment;
+    expect((attachment.oneOf ?? attachment.anyOf)[0].required).toEqual(['ref']);
+    const ref = 'a'.repeat(64);
+    const datetime = '2026-12-01T09:00:00Z';
+    const byRef: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'schedule', datetime, attachment: { ref }, caption: 'Menu' } });
+    expect(byRef.isError).toBeFalsy();
+    const inline: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'schedule', datetime, attachment: { name: 'menu.png', mime: 'image/png', dataB64: 'YWJj' } } });
+    expect(inline.isError).toBeFalsy();
+    for (const bad of [{ name: 'menu.gif', mime: 'image/gif', dataB64: 'YWJj' }, { ref: 'short' }, { ref, name: 'menu.png' }, { path: '/tmp/menu.png' }]) {
+      const res: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'schedule', datetime, attachment: bad } });
+      expect(res.isError).toBe(true);
+    }
+    expect(owner).toEqual([
+      { method: 'manage_status', params: { action: 'schedule', datetime, attachment: { ref }, caption: 'Menu' } },
+      { method: 'manage_status', params: { action: 'schedule', datetime, attachment: { name: 'menu.png', mime: 'image/png', dataB64: 'YWJj' } } },
+    ]);
+    await mcp.client.close();
+  });
+
   it('a hidden status tool never reaches the extension', async () => {
     const bridge = new Bridge();
     const calls = fakeExtension(bridge, 'sess_a', { manage_kaption: true });
