@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kaption-whatsapp",
+  "version": "1.0.0",
+  "description": "Work with your own WhatsApp from Hermes through Kaption's hosted MCP server: search chats, read voice-note transcripts, summarize conversations, find contacts and groups, set reminders, and schedule or send messages you confirm.",
+  "author": {
+    "name": "Kaption AI",
+    "url": "https://kaptionai.com"
+  },
+  "homepage": "https://kaptionai.com/mcp/",
+  "repository": "https://github.com/Kaption-AI/mcp-extension",
+  "license": "BUSL-1.1",
+  "keywords": ["whatsapp", "voice-notes", "transcription", "messaging", "reminders", "mcp"],
+  "extensions": {
+    "com.nousresearch.hermes": {
+      "servers": {
+        "kaption": { "trust": "untrusted" }
+      }
+    }
+  }
+}
