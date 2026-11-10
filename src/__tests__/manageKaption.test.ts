@@ -16,8 +16,9 @@ import { RelayBridge } from '../relayBridge';
 import { createMcpServer } from '../mcpServer';
 import { MANAGE_KAPTION_TOOLS, parseAnswer, readManageFeatures, visibleManageTools } from '../manageKaption';
 import { PLANS_UI_HTML, PLANS_UI_MIME_TYPE } from '../plansUi';
-import { TOOLS } from '../tools';
+import { TOOLS, getToolsForMCP } from '../tools';
 import canonical from './fixtures/mcp-manage-tools.json';
+import channelsCanonical from './fixtures/mcp-channels-communities-tools.json';
 
 jest.mock('../updateCheck', () => ({ getUpdateInfo: () => null, getCurrentVersion: () => '0.0.0-test', checkForUpdates: () => {} }));
 
@@ -81,10 +82,11 @@ async function connectClient(bridge: Bridge | RelayBridge) {
 
 describe('mcp-manage-kaption.LIST.2 definitions', () => {
   it('are the canonical ones, verbatim, after every other tool', async () => {
-    // The status tools (scheduled-status.MCP) follow the manage block.
+    // The status tools (scheduled-status.MCP), then the channels and communities tools, follow the manage block.
     const names = TOOLS.map(t => t.name);
-    expect(names.slice(-2)).toEqual(['manage_status', 'list_status_posts']);
-    expect(names.slice(-canonical.length - 2, -2)).toEqual(canonical.map(t => t.name));
+    const tail = channelsCanonical.length + 2;
+    expect(names.slice(-tail, -channelsCanonical.length)).toEqual(['manage_status', 'list_status_posts']);
+    expect(names.slice(-canonical.length - tail, -tail)).toEqual(canonical.map(t => t.name));
     const bridge = new Bridge();
     fakeExtension(bridge, 'sess_owner', { manage_kaption: true, business_agent: true, plans: true });
     const { client } = await connectClient(bridge);
@@ -422,6 +424,128 @@ describe('scheduled-status.MCP the status tools on the hub', () => {
     const calls = fakeExtension(bridge, 'sess_a', { manage_kaption: true });
     const mcp = await connectClient(bridge);
     const res: any = await mcp.client.callTool({ name: 'manage_status', arguments: { action: 'cancel', id: 's1' } });
+    expect(res.isError).toBe(true);
+    expect(calls).toEqual([]);
+    await mcp.client.close();
+  });
+});
+
+// Without the hub's additionalProperties: false (every tool's object schemas carry it) and the SDK's $schema, recursively.
+function withoutClosedObjects(v: any): any {
+  if (Array.isArray(v)) return v.map(withoutClosedObjects);
+  if (!v || typeof v !== 'object') return v;
+  const out: any = {};
+  for (const [k, x] of Object.entries(v)) {
+    if ((k === 'additionalProperties' && x === false) || k === '$schema') continue;
+    out[k === 'anyOf' ? 'oneOf' : k] = withoutClosedObjects(x); // the SDK lists a union as anyOf
+  }
+  return out;
+}
+
+const CHANNEL_TOOLS = ['manage_channels', 'manage_communities', 'list_channels', 'get_channel', 'list_communities', 'get_community'];
+
+describe('whatsapp-channels-communities.HUB the channels and communities tools on the hub', () => {
+  it('HUB.2 are the pinned definitions, verbatim (name, title, description, input schema, annotations), last', async () => {
+    expect(TOOLS.slice(-CHANNEL_TOOLS.length).map(t => t.name)).toEqual(channelsCanonical.map(t => t.name));
+    // getToolsForMCP() is the form kext's generate-webmcp-tools.mjs reads.
+    const exported = getToolsForMCP();
+    for (const want of channelsCanonical as any[]) {
+      const got = exported.find(t => t.name === want.name)!;
+      expect({ ...got, inputSchema: withoutClosedObjects(got.inputSchema) }).toEqual(want);
+    }
+    const bridge = new Bridge();
+    fakeExtension(bridge, 'sess_owner', { channels_communities: true });
+    const mcp = await connectClient(bridge);
+    const listed = (await mcp.client.listTools()).tools;
+    for (const want of channelsCanonical as any[]) {
+      const got = listed.find(t => t.name === want.name)!;
+      expect(got.title).toBe(want.title);
+      expect(got.description).toBe(want.description);
+      expect(got.annotations).toEqual(want.annotations);
+      expect(withoutClosedObjects(got.inputSchema)).toEqual(want.inputSchema);
+    }
+    await mcp.client.close();
+  });
+
+  it('HUB.1 the key: only channels_communities true shows them', () => {
+    expect([...visibleManageTools([{ channels_communities: true }])]).toEqual(CHANNEL_TOOLS);
+    expect([...visibleManageTools([{ manage_kaption: true, business_agent: true, plans: true, scheduled_status: true }])].filter(n => CHANNEL_TOOLS.includes(n))).toEqual([]);
+    expect(readManageFeatures({ channels_communities: true, local_send: true })).toEqual({ channels_communities: true });
+    expect(readManageFeatures({ channels_communities: 'true' })).toEqual({});
+  });
+
+  it('HUB.1 hidden for an older extension (no key) and when it is false; listed when one account says true', async () => {
+    const bridge = new Bridge();
+    const mcp = await connectClient(bridge);
+    fakeExtension(bridge, 'sess_old', { local_send: true, manage_kaption: true, scheduled_status: true });
+    fakeExtension(bridge, 'sess_off', { channels_communities: false });
+    await flush();
+    const before = await mcp.names();
+    for (const name of CHANNEL_TOOLS) expect(before).not.toContain(name);
+    const changes = mcp.changed.tools;
+    fakeExtension(bridge, 'sess_owner', { channels_communities: true });
+    await flush();
+    const after = await mcp.names();
+    for (const name of CHANNEL_TOOLS) expect(after).toContain(name);
+    expect(mcp.changed.tools).toBeGreaterThan(changes);
+    await mcp.client.close();
+  });
+
+  it('MCP_ROUTES.3 reads go to the account that said so as manage_* list / get; writes forwarded as is', async () => {
+    const bridge = new Bridge();
+    const owner = fakeExtension(bridge, 'sess_owner', { channels_communities: true });
+    const other = fakeExtension(bridge, 'sess_other', { manage_kaption: true }); // most recently active
+    const mcp = await connectClient(bridge);
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ['list_channels', {}],
+      ['get_channel', { id: '120363000000000001@newsletter' }],
+      ['list_communities', {}],
+      ['get_community', { id: '120363000000000002@g.us' }],
+      ['manage_channels', { action: 'schedule', id: '120363000000000001@newsletter', posts: [{ text: 'Mon', datetime: '2026-11-16T09:00:00-03:00' }] }],
+      ['manage_channels', { action: 'cross_post', text: 'Closed', targets: ['120363000000000001@newsletter', { id: '120363000000000002@g.us', text: 'Closed Friday' }] }],
+      ['manage_communities', { action: 'digest', id: '120363000000000002@g.us', since: '2026-11-08T00:00:00-03:00' }],
+    ];
+    for (const [name, args] of calls) {
+      const res: any = await mcp.client.callTool({ name, arguments: args });
+      expect(res.isError).toBeFalsy();
+    }
+    expect(owner).toEqual([
+      { method: 'manage_channels', params: { action: 'list' } },
+      { method: 'manage_channels', params: { id: '120363000000000001@newsletter', action: 'get' } },
+      { method: 'manage_communities', params: { action: 'list' } },
+      { method: 'manage_communities', params: { id: '120363000000000002@g.us', action: 'get' } },
+      { method: 'manage_channels', params: calls[4][1] },
+      { method: 'manage_channels', params: calls[5][1] },
+      { method: 'manage_communities', params: calls[6][1] },
+    ]);
+    expect(other).toEqual([]);
+    await mcp.client.close();
+  });
+
+  it('refuses unknown actions and more than 14 posts / 10 targets / 20 groups before the extension', async () => {
+    const bridge = new Bridge();
+    const owner = fakeExtension(bridge, 'sess_owner', { channels_communities: true });
+    const mcp = await connectClient(bridge);
+    const post = { text: 'x', datetime: '2026-11-16T09:00:00-03:00' };
+    for (const [name, args] of [
+      ['manage_channels', { action: 'delete', id: 'a@newsletter' }],
+      ['manage_channels', { action: 'schedule', id: 'a@newsletter', posts: Array(15).fill(post) }],
+      ['manage_channels', { action: 'cross_post', text: 'x', targets: Array(11).fill('a@newsletter') }],
+      ['manage_communities', { action: 'add_groups', id: 'c@g.us', group_ids: Array(21).fill('g@g.us') }],
+      ['get_channel', {}],
+    ] as Array<[string, Record<string, unknown>]>) {
+      const res: any = await mcp.client.callTool({ name, arguments: args });
+      expect(res.isError).toBe(true);
+    }
+    expect(owner).toEqual([]);
+    await mcp.client.close();
+  });
+
+  it('a hidden channel tool never reaches the extension', async () => {
+    const bridge = new Bridge();
+    const calls = fakeExtension(bridge, 'sess_a', { manage_kaption: true, scheduled_status: true });
+    const mcp = await connectClient(bridge);
+    const res: any = await mcp.client.callTool({ name: 'list_channels', arguments: {} });
     expect(res.isError).toBe(true);
     expect(calls).toEqual([]);
     await mcp.client.close();
