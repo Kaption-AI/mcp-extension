@@ -442,7 +442,7 @@ function withoutClosedObjects(v: any): any {
   return out;
 }
 
-const CHANNEL_TOOLS = ['manage_channels', 'manage_communities', 'list_channels', 'get_channel', 'list_communities', 'get_community'];
+const CHANNEL_TOOLS = ['manage_channels', 'manage_communities', 'list_channels', 'get_channel', 'list_scheduled_channel_posts', 'list_communities', 'get_community', 'get_community_digest'];
 
 describe('whatsapp-channels-communities.HUB the channels and communities tools on the hub', () => {
   it('HUB.2 are the pinned definitions, verbatim (name, title, description, input schema, annotations), last', async () => {
@@ -491,7 +491,7 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
     await mcp.client.close();
   });
 
-  it('MCP_ROUTES.3 reads go to the account that said so as manage_* list / get; writes forwarded as is', async () => {
+  it('MCP_ROUTES.3, MCP_ROUTES.4 reads go to the account that said so as manage_* list / get; writes forwarded as is', async () => {
     const bridge = new Bridge();
     const owner = fakeExtension(bridge, 'sess_owner', { channels_communities: true });
     const other = fakeExtension(bridge, 'sess_other', { manage_kaption: true }); // most recently active
@@ -503,7 +503,9 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
       ['get_community', { id: '120363000000000002@g.us' }],
       ['manage_channels', { action: 'schedule', id: '120363000000000001@newsletter', posts: [{ text: 'Mon', datetime: '2026-11-16T09:00:00-03:00' }] }],
       ['manage_channels', { action: 'cross_post', text: 'Closed', targets: ['120363000000000001@newsletter', { id: '120363000000000002@g.us', text: 'Closed Friday' }] }],
-      ['manage_communities', { action: 'digest', id: '120363000000000002@g.us', since: '2026-11-08T00:00:00-03:00' }],
+      ['list_scheduled_channel_posts', { filter: 'all' }],
+      ['get_community_digest', { id: '120363000000000002@g.us', since: '2026-11-08T00:00:00-03:00' }],
+      ['manage_communities', { action: 'announce', id: '120363000000000002@g.us', text: 'Meeting at 9' }],
     ];
     for (const [name, args] of calls) {
       const res: any = await mcp.client.callTool({ name, arguments: args });
@@ -516,7 +518,9 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
       { method: 'manage_communities', params: { id: '120363000000000002@g.us', action: 'get' } },
       { method: 'manage_channels', params: calls[4][1] },
       { method: 'manage_channels', params: calls[5][1] },
-      { method: 'manage_communities', params: calls[6][1] },
+      { method: 'manage_channels', params: { filter: 'all', action: 'scheduled' } },
+      { method: 'manage_communities', params: { id: '120363000000000002@g.us', since: '2026-11-08T00:00:00-03:00', action: 'digest' } },
+      { method: 'manage_communities', params: calls[8][1] },
     ]);
     expect(other).toEqual([]);
     await mcp.client.close();
@@ -533,6 +537,12 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
       ['manage_channels', { action: 'cross_post', text: 'x', targets: Array(11).fill('a@newsletter') }],
       ['manage_communities', { action: 'add_groups', id: 'c@g.us', group_ids: Array(21).fill('g@g.us') }],
       ['get_channel', {}],
+      // mcp.TOOLS.19 — the manage tools take no read action any more.
+      ['manage_channels', { action: 'scheduled' }],
+      ['manage_channels', { action: 'list' }],
+      ['manage_communities', { action: 'digest', id: 'c@g.us' }],
+      ['get_community_digest', {}],
+      ['list_scheduled_channel_posts', { filter: 'later' }],
     ] as Array<[string, Record<string, unknown>]>) {
       const res: any = await mcp.client.callTool({ name, arguments: args });
       expect(res.isError).toBe(true);
