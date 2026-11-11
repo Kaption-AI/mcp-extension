@@ -53,6 +53,6 @@ Kaption connects WhatsApp to AI assistants through MCP. The tools run against th
 
 - **"Extension not connected"**: Kaption is closed or Cloud MCP is off. Ask the user to open WhatsApp Web with the extension, or the desktop app, and turn the connection on.
 - **401 with `WWW-Authenticate`**: sign in again through the client's OAuth flow.
-- **Limit reached**: the plan's monthly Claude and ChatGPT credits are used up. Every account is unlimited for its first 60 days; after that, credits come with a plan: Lifetime local AI 50 a month, Pro 250, Business 500 (250 per WhatsApp number). Each request uses a few. The count starts again on the first day of each month. Point the user to https://kaptionai.com/pricing/; the assistant stays connected.
+- **Limit reached**: the plan's Claude and ChatGPT actions are used up. Every account is unlimited for its first 60 days; after that: Free and Lifetime local AI 20 actions a week (the week starts again on Monday, 00:00 UTC); Pro 250 a month; Business 250 a month per linked WhatsApp number, shared by all its numbers (500 with the 2 numbers it includes); Business Agent unlimited. Monthly counts start again on the first day of each month (UTC). The refusal says when the count starts again; `kaption_help` with topic `pricing` has the current plans. Point the user to https://kaptionai.com/pricing/; the assistant stays connected.
 
 More: https://kaptionai.com/llms.txt and https://kaptionai.com/developers/
