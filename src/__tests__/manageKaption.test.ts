@@ -19,6 +19,7 @@ import { PLANS_UI_HTML, PLANS_UI_MIME_TYPE } from '../plansUi';
 import { TOOLS, getToolsForMCP } from '../tools';
 import canonical from './fixtures/mcp-manage-tools.json';
 import channelsCanonical from './fixtures/mcp-channels-communities-tools.json';
+import exportChatCanonical from './fixtures/mcp-export-chat-tools.json';
 
 jest.mock('../updateCheck', () => ({ getUpdateInfo: () => null, getCurrentVersion: () => '0.0.0-test', checkForUpdates: () => {} }));
 
@@ -82,10 +83,11 @@ async function connectClient(bridge: Bridge | RelayBridge) {
 
 describe('mcp-manage-kaption.LIST.2 definitions', () => {
   it('are the canonical ones, verbatim, after every other tool', async () => {
-    // The status tools (scheduled-status.MCP), then the channels and communities tools, follow the manage block.
+    // The status tools (scheduled-status.MCP), then the channels and communities tools, then export_chat
+    // (chat-export.MCP), follow the manage block.
     const names = TOOLS.map(t => t.name);
-    const tail = channelsCanonical.length + 2;
-    expect(names.slice(-tail, -channelsCanonical.length)).toEqual(['manage_status', 'list_status_posts']);
+    const tail = channelsCanonical.length + exportChatCanonical.length + 2;
+    expect(names.slice(-tail, -tail + 2)).toEqual(['manage_status', 'list_status_posts']);
     expect(names.slice(-canonical.length - tail, -tail)).toEqual(canonical.map(t => t.name));
     const bridge = new Bridge();
     fakeExtension(bridge, 'sess_owner', { manage_kaption: true, business_agent: true, plans: true });
@@ -446,7 +448,7 @@ const CHANNEL_TOOLS = ['manage_channels', 'manage_communities', 'list_channels',
 
 describe('whatsapp-channels-communities.HUB the channels and communities tools on the hub', () => {
   it('HUB.2 are the pinned definitions, verbatim (name, title, description, input schema, annotations), last', async () => {
-    expect(TOOLS.slice(-CHANNEL_TOOLS.length).map(t => t.name)).toEqual(channelsCanonical.map(t => t.name));
+    expect(TOOLS.map(t => t.name).filter(n => CHANNEL_TOOLS.includes(n))).toEqual(channelsCanonical.map(t => t.name));
     // getToolsForMCP() is the form kext's generate-webmcp-tools.mjs reads.
     const exported = getToolsForMCP();
     for (const want of channelsCanonical as any[]) {
@@ -558,6 +560,57 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
     const res: any = await mcp.client.callTool({ name: 'list_channels', arguments: {} });
     expect(res.isError).toBe(true);
     expect(calls).toEqual([]);
+    await mcp.client.close();
+  });
+});
+
+describe('chat-export.MCP export_chat on the hub', () => {
+  it('chat-export.MCP.2, MCP.4 — is the pinned kaptionai definition, verbatim (read-only), last', async () => {
+    expect(TOOLS[TOOLS.length - 1].name).toBe('export_chat');
+    const want = (exportChatCanonical as any[])[0];
+    const got = getToolsForMCP().find(t => t.name === 'export_chat')!;
+    expect({ ...got, inputSchema: withoutClosedObjects(got.inputSchema) }).toEqual(want);
+    expect(got.annotations?.readOnlyHint).toBe(true);
+    const bridge = new Bridge();
+    fakeExtension(bridge, 'sess_owner', { export_chat: true });
+    const mcp = await connectClient(bridge);
+    const listed = (await mcp.client.listTools()).tools.find(t => t.name === 'export_chat')!;
+    expect(listed.title).toBe(want.title);
+    expect(listed.description).toBe(want.description);
+    expect(listed.annotations).toEqual(want.annotations);
+    expect(withoutClosedObjects(listed.inputSchema)).toEqual(want.inputSchema);
+    await mcp.client.close();
+  });
+
+  it('chat-export.MCP.6 — the key: only export_chat true shows it', () => {
+    expect([...visibleManageTools([{ export_chat: true }])]).toEqual(['export_chat']);
+    expect([...visibleManageTools([{ manage_kaption: true, channels_communities: true }])]).not.toContain('export_chat');
+    expect(readManageFeatures({ export_chat: true, local_send: true })).toEqual({ export_chat: true });
+    expect(readManageFeatures({ export_chat: 'true' })).toEqual({});
+  });
+
+  it('chat-export.MCP.6 — hidden for an older extension; appears with list_changed; called on the account that said so', async () => {
+    const bridge = new Bridge();
+    const mcp = await connectClient(bridge);
+    const old = fakeExtension(bridge, 'sess_old', { local_send: true, manage_kaption: true, channels_communities: true });
+    await flush();
+    expect(await mcp.names()).not.toContain('export_chat');
+    const hidden: any = await mcp.client.callTool({ name: 'export_chat', arguments: { chat_id: '15555550101@c.us' } });
+    expect(hidden.isError).toBe(true);
+    const changes = mcp.changed.tools;
+    const owner = fakeExtension(bridge, 'sess_owner', { export_chat: true });
+    await flush();
+    expect(await mcp.names()).toContain('export_chat');
+    expect(mcp.changed.tools).toBeGreaterThan(changes);
+    const fresh = fakeExtension(bridge, 'sess_other', { manage_kaption: true }); // most recently active
+    const res: any = await mcp.client.callTool({ name: 'export_chat', arguments: { chat_id: '15555550101@c.us', format: 'csv', last_n: 100 } });
+    expect(res.isError).toBeFalsy();
+    expect(owner).toEqual([{ method: 'export_chat', params: { chat_id: '15555550101@c.us', format: 'csv', last_n: 100 } }]);
+    expect(old).toEqual([]);
+    expect(fresh).toEqual([]);
+    const bad: any = await mcp.client.callTool({ name: 'export_chat', arguments: { chat_id: '1@c.us', media: ['gif'] } });
+    expect(bad.isError).toBe(true);
+    expect(owner).toHaveLength(1);
     await mcp.client.close();
   });
 });
