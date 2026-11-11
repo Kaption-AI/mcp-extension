@@ -15,6 +15,7 @@ import {
   syncGatedTools,
   visibleManageTools,
 } from './manageKaption';
+import { withLiveGuide } from './liveGuide';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 import { getTokenFilePath } from './auth';
 
@@ -137,7 +138,8 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           const source = called.source;
           // mcp-usage-pricing.RELAY.1 — a usage warning from the extension becomes its own line after the result.
           const marked = takeUsageNotice(feature ? parseAnswer(called.data) : called.data);
-          const data = marked.result;
+          // mcp-manage-kaption.HELP.5 — kaption_help "read" answers the guide's live page on kaptionai.com.
+          const data = tool.name === 'kaption_help' ? await withLiveGuide(routed.params, marked.result) : marked.result;
 
           const sourceInfo = source?.sessionId ? {
             sessionId: source.sessionId,
@@ -207,7 +209,8 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
 
   installManageResources(server.server, {
     visible: () => visible,
-    callHelp: async args => (await bridge.callTool('kaption_help', args, bridge.sessionWithFeature?.('manage_kaption'))).data,
+    // mcp-manage-kaption.HELP.5 — a guide read answers its live page (kaption://guide/{topic}).
+    callHelp: async args => withLiveGuide(args, (await bridge.callTool('kaption_help', args, bridge.sessionWithFeature?.('manage_kaption'))).data),
   });
 
   // mcp.LOCAL_HUB.11 — hide the send tools when every connected account reported MCP_LOCAL_SEND off;
