@@ -5,6 +5,8 @@ import type { ToolBridge, ToolCallResult, SessionInfo } from './bridge';
 import { createWebSocketServer } from './wsServer';
 import { loadOrCreateToken, SessionManager } from './auth';
 import { readManageFeatures, type ManageFeatures } from './manageKaption';
+import type { McpClientInfo } from './mcpClient';
+import { rpcError } from './toolErrors';
 
 interface PendingRequest {
   resolve: (result: ToolCallResult) => void;
@@ -43,6 +45,8 @@ export class RelayBridge implements ToolBridge {
   /** mcp.LOCAL_HUB.11 — as the hub broadcast it; true when it didn't say (older hubs). */
   private _localSendAvailable = true;
   private accountListeners: Array<() => void> = [];
+  /** mcp-local-hub-growth.CLIENT.2 — kept so a relay promoted to hub tells the extension its own AI app. */
+  private mcpClient: McpClientInfo | undefined;
 
   /** When promoted to hub, this holds the real bridge. */
   private hubBridge: Bridge | null = null;
@@ -74,6 +78,11 @@ export class RelayBridge implements ToolBridge {
   sessionWithFeature(key: keyof ManageFeatures): string | undefined {
     if (this.hubBridge) return this.hubBridge.sessionWithFeature(key);
     return this._extensions.find(e => readManageFeatures(e.features)[key] === true)?.sessionId;
+  }
+
+  setMcpClient(client: McpClientInfo | undefined): void {
+    this.mcpClient = client;
+    this.hubBridge?.setMcpClient(client);
   }
 
   onAccountsChanged(listener: () => void): void {
@@ -160,7 +169,8 @@ export class RelayBridge implements ToolBridge {
             const unknown = msg.error.data?.code === 'UNKNOWN_SESSION';
             pending.reject(unknown
               ? new UnknownSessionError(String(msg.error.data.sessionId), msg.error.data.connected ?? [])
-              : new Error(msg.error.message));
+              // mcp-local-hub-growth.ERRORS.2 — keeps the code the main hub passed on.
+              : rpcError(msg.error));
           } else {
             pending.resolve(msg.result);
           }
@@ -186,10 +196,10 @@ export class RelayBridge implements ToolBridge {
     });
   }
 
-  async callTool(method: string, params: Record<string, unknown>, targetSessionId?: string): Promise<ToolCallResult> {
+  async callTool(method: string, params: Record<string, unknown>, targetSessionId?: string, client?: McpClientInfo): Promise<ToolCallResult> {
     // If promoted to hub, delegate to the real bridge
     if (this.hubBridge) {
-      return this.hubBridge.callTool(method, params, targetSessionId);
+      return this.hubBridge.callTool(method, params, targetSessionId, client);
     }
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -197,7 +207,7 @@ export class RelayBridge implements ToolBridge {
     }
 
     if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => {
-      const slot = await this.callTool('create_attachment_upload', metadata, targetSessionId);
+      const slot = await this.callTool('create_attachment_upload', metadata, targetSessionId, client);
       targetSessionId = slot.source?.sessionId ?? targetSessionId;
       return slot.data;
     });
@@ -217,7 +227,8 @@ export class RelayBridge implements ToolBridge {
       this.pendingRequests.set(id, { resolve, reject, timeout });
 
       try {
-        this.ws!.send(JSON.stringify({ jsonrpc: '2.0', id, method, params: sendParams }));
+        // mcp-local-hub-growth.CLIENT.1 — this process's AI app rides with the call; the main hub passes it on.
+        this.ws!.send(JSON.stringify({ jsonrpc: '2.0', id, method, params: sendParams, ...(client ? { client } : {}) }));
       } catch (err) {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);
@@ -234,6 +245,7 @@ export class RelayBridge implements ToolBridge {
       const sessionManager = new SessionManager();
       const bridge = new Bridge();
       await createWebSocketServer(bridge, token, sessionManager);
+      bridge.setMcpClient(this.mcpClient);
       this.hubBridge = bridge;
       for (const listener of this.accountListeners) bridge.onAccountsChanged(listener);
       for (const listener of this.accountListeners) listener();

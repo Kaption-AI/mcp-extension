@@ -3,6 +3,18 @@ import type { IncomingMessage } from 'http';
 import { Bridge, UnknownSessionError } from './bridge';
 import { validateToken, SessionManager } from './auth';
 import type { ManageFeatures } from './manageKaption';
+import { sanitizeClient } from './mcpClient';
+import { getCurrentVersion } from './updateCheck';
+
+/**
+ * mcp-local-hub-growth.CLIENT.2 — what the hub tells the extension about itself in pairing_request, auth_success
+ * and pairing_complete: its version and the AI app connected to it (when that app has said). Older extensions
+ * ignore unknown params.
+ */
+function hubParams(bridge: Bridge): { hub_version: string; client?: { name: string; version: string } } {
+  const client = bridge.mcpClient;
+  return { hub_version: getCurrentVersion(), ...(client ? { client } : {}) };
+}
 
 const WS_PORT = 7865;
 const CONNECTION_TIMEOUT_MS = 10_000;
@@ -184,7 +196,8 @@ function handleRelayConnect(
     // Forward tool calls through the bridge to the extension
     if (parsed.id && parsed.method) {
       const targetSession = parsed.params?.target_session;
-      bridge.callTool(parsed.method, parsed.params || {}, targetSession)
+      // mcp-local-hub-growth.CLIENT.1 — the second hub's own AI app, not this hub's, goes on to the extension.
+      bridge.callTool(parsed.method, parsed.params || {}, targetSession, sanitizeClient(parsed.client))
         .then((result) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ jsonrpc: '2.0', id: parsed.id, result }));
@@ -196,7 +209,8 @@ function handleRelayConnect(
               jsonrpc: '2.0',
               id: parsed.id,
               error: {
-                code: -32603,
+                // mcp-local-hub-growth.ERRORS.2 — the extension's code (e.g. method not found) reaches the relay.
+                code: typeof error.code === 'number' ? error.code : -32603,
                 message: error.message,
                 // mcp.LOCAL_HUB.10 — relays rebuild the unknown-account error from this.
                 ...(error instanceof UnknownSessionError
@@ -238,7 +252,7 @@ async function handleExtensionHandshake(
       console.error(`[Kaption AI MCP] Extension re-authenticated (session: ${sessionId})`);
       ws.send(JSON.stringify({
         method: 'auth_success',
-        params: { session_id: sessionId },
+        params: { session_id: sessionId, ...hubParams(bridge) },
       }));
       setupExtension(ws, bridge, msg, sessionId);
       return;
@@ -264,7 +278,7 @@ function startPairingFlow(
 
   ws.send(JSON.stringify({
     method: 'pairing_request',
-    params: { hub_name: 'Kaption AI MCP' },
+    params: { hub_name: 'Kaption AI MCP', ...hubParams(bridge) },
   }));
 
   const pairingTimeout = setTimeout(() => {
@@ -305,6 +319,7 @@ function startPairingFlow(
         session_id: session.id,
         session_token: session.token,
         expires_at: new Date(session.expiresAt).getTime(),
+        ...hubParams(bridge),
       },
     }));
 

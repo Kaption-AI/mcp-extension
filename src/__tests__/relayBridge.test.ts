@@ -31,6 +31,7 @@ jest.mock('../bridge', () => {
     setConnection() { this._connected = true; }
     clearConnection() { this._connected = false; }
     replaceConnection() {}
+    setMcpClient() {}
     setSession(id: string, s: any) { this._session = s; }
     async callTool() { return {}; }
     handleResponse() {}

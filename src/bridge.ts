@@ -1,6 +1,8 @@
 import { resolveLocalAttachment } from './attachment';
 import { EventEmitter } from 'events';
 import { readManageFeatures, type ManageFeatures } from './manageKaption';
+import type { McpClientInfo } from './mcpClient';
+import { rpcError } from './toolErrors';
 
 export interface SessionInfo {
   phone?: string;
@@ -36,7 +38,13 @@ export interface ToolBridge {
   sessionWithFeature(key: keyof ManageFeatures): string | undefined;
   /** mcp.LOCAL_HUB.11 — called whenever the connected accounts or their features may have changed. */
   onAccountsChanged(listener: () => void): void;
-  callTool(method: string, params: Record<string, unknown>, targetSessionId?: string): Promise<ToolCallResult>;
+  /**
+   * mcp-local-hub-growth.CLIENT.1 — `client` is the AI app that made the call (sanitized); it rides beside the
+   * JSON-RPC request, never inside params, and is left out when unknown.
+   */
+  callTool(method: string, params: Record<string, unknown>, targetSessionId?: string, client?: McpClientInfo): Promise<ToolCallResult>;
+  /** mcp-local-hub-growth.CLIENT.2 — the AI app connected to this process over stdio, once it said (initialize). */
+  setMcpClient?(client: McpClientInfo | undefined): void;
 }
 
 interface PendingRequest {
@@ -88,6 +96,16 @@ export class Bridge extends EventEmitter implements ToolBridge {
   private connections = new Map<string, ExtensionConnection>();
   private lastActiveId: string | null = null;
   private readonly REQUEST_TIMEOUT_MS = 30_000;
+  /** mcp-local-hub-growth.CLIENT.2 — this hub's own stdio client, told to the extension when it pairs. */
+  private _mcpClient: McpClientInfo | undefined;
+
+  get mcpClient(): McpClientInfo | undefined {
+    return this._mcpClient;
+  }
+
+  setMcpClient(client: McpClientInfo | undefined): void {
+    this._mcpClient = client;
+  }
 
   /** Returns true if any extension is connected. */
   get connected(): boolean {
@@ -215,6 +233,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
     method: string,
     params: Record<string, unknown>,
     targetSessionId?: string,
+    client?: McpClientInfo,
   ): Promise<ToolCallResult> {
     if (targetSessionId && !this.connections.has(targetSessionId)) {
       throw new UnknownSessionError(targetSessionId, [...this.connections.keys()]);
@@ -226,7 +245,7 @@ export class Bridge extends EventEmitter implements ToolBridge {
       );
     }
 
-    if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => (await this.callTool('create_attachment_upload', metadata, sessionId ?? undefined)).data);
+    if (['send_message', 'manage_scheduled_messages'].includes(method) && params.attachment != null) params = await resolveLocalAttachment(method, params, async metadata => (await this.callTool('create_attachment_upload', metadata, sessionId ?? undefined, client)).data);
     const id = `req_${++this.requestCounter}`;
 
     const data = await new Promise((resolve, reject) => {
@@ -242,6 +261,8 @@ export class Bridge extends EventEmitter implements ToolBridge {
         id,
         method,
         params,
+        // mcp-local-hub-growth.CLIENT.1 — top level, beside params; older extensions ignore it.
+        ...(client ? { client } : {}),
       });
 
       try {
@@ -296,7 +317,8 @@ export class Bridge extends EventEmitter implements ToolBridge {
     this.pendingRequests.delete(parsed.id);
 
     if (parsed.error) {
-      pending.reject(new Error(parsed.error.message));
+      // mcp-local-hub-growth.ERRORS.2 — keep the JSON-RPC code (method-not-found reads as an old Kaption).
+      pending.reject(rpcError(parsed.error));
     } else {
       pending.resolve(parsed.result);
     }
