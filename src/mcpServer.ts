@@ -18,6 +18,8 @@ import {
 import { withLiveGuide } from './liveGuide';
 import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 import { getTokenFilePath } from './auth';
+import { sanitizeClient } from './mcpClient';
+import { toolErrorText } from './toolErrors';
 
 const HTTP_API_PORT = 7866;
 
@@ -57,6 +59,16 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     version: getCurrentVersion(),
   });
 
+  // mcp-local-hub-growth.CLIENT.1 — the AI app connected over stdio, as its initialize request said (sanitized);
+  // undefined until it has said, and then `client` is left out of the calls.
+  const mcpClient = () => sanitizeClient(server.server.getClientVersion());
+  // mcp-local-hub-growth.CLIENT.2 — the hub tells the extension which app it serves when it pairs.
+  const previousOnInitialized = server.server.oninitialized;
+  server.server.oninitialized = () => {
+    previousOnInitialized?.();
+    bridge.setMcpClient?.(mcpClient());
+  };
+
   const sendTools: RegisteredTool[] = [];
   const register = (tool: ToolDefinition): RegisteredTool => {
     const schema = tool.inputSchema;
@@ -84,23 +96,8 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           }
 
           if (!bridge.connected) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: JSON.stringify({
-                    error: 'WhatsApp extension not connected',
-                    reasons: [
-                      'WhatsApp Web is not open in Chrome/Edge',
-                      'The KaptionAI extension is not installed, or Claude and ChatGPT access is not turned on in it',
-                      'The extension just started and hasn\'t connected yet (wait a few seconds and retry)',
-                    ],
-                    fix: 'Open WhatsApp Web (web.whatsapp.com) in Chrome/Edge with the KaptionAI extension, then retry.',
-                  }),
-                },
-              ],
-              isError: true,
-            };
+            // mcp-local-hub-growth.ERRORS.1 — the cloud's "Extension not connected" text.
+            return errorAnswer(tool.name, new Error('Extension not connected'));
           }
 
           // Handle session query locally — return flat list of all connected WhatsApp accounts
@@ -134,7 +131,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           // mcp.TOOLS.19 — a read-only tool reaches the extension as its manage_* method and action.
           const routed = routeToolCall(tool.name, forwardParams);
           const routedSession = targetSession ?? (feature ? bridge.sessionWithFeature?.(feature) : undefined);
-          const called = await bridge.callTool(routed.method, routed.params, routedSession);
+          const called = await bridge.callTool(routed.method, routed.params, routedSession, mcpClient());
           const source = called.source;
           // mcp-usage-pricing.RELAY.1 — a usage warning from the extension becomes its own line after the result.
           const marked = takeUsageNotice(feature ? parseAnswer(called.data) : called.data);
@@ -169,17 +166,8 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
             ...(structuredContent ? { structuredContent } : {}),
           };
         } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  error: (error as Error).message,
-                }),
-              },
-            ],
-            isError: true,
-          };
+          // mcp-local-hub-growth.ERRORS.1 — the same text the cloud relay answers, not a JSON object.
+          return errorAnswer(tool.name, error);
         }
       }
     );
@@ -210,7 +198,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
   installManageResources(server.server, {
     visible: () => visible,
     // mcp-manage-kaption.HELP.5 — a guide read answers its live page (kaption://guide/{topic}).
-    callHelp: async args => withLiveGuide(args, (await bridge.callTool('kaption_help', args, bridge.sessionWithFeature?.('manage_kaption'))).data),
+    callHelp: async args => withLiveGuide(args, (await bridge.callTool('kaption_help', args, bridge.sessionWithFeature?.('manage_kaption'), mcpClient())).data),
   });
 
   // mcp.LOCAL_HUB.11 — hide the send tools when every connected account reported MCP_LOCAL_SEND off;
@@ -226,6 +214,11 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
   bridge.onAccountsChanged(syncSendTools);
 
   return server;
+}
+
+/** mcp-local-hub-growth.ERRORS.1 — a failed tool call, answered as the cloud relay answers it. */
+function errorAnswer(tool: string, error: unknown) {
+  return { content: [{ type: 'text' as const, text: toolErrorText(tool, error) }], isError: true };
 }
 
 /**
