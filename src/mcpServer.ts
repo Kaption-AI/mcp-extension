@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { ToolBridge } from './bridge';
 import { listAccounts, MULTIPLE_ACCOUNTS_WARNING } from './accounts';
 import { takeUsageNotice } from './usageNotice';
+import { ALLOW_EXTRA_DEFINITION, ALLOW_EXTRA_TOOL, creditsAnswer, creditsToolVisible } from './creditsTool';
 import { TOOLS, routeToolCall, type ToolDefinition } from './tools';
 import {
   installManageResources,
@@ -200,6 +201,40 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     // mcp-manage-kaption.HELP.5 — a guide read answers its live page (kaption://guide/{topic}).
     callHelp: async args => withLiveGuide(args, (await bridge.callTool('kaption_help', args, bridge.sessionWithFeature?.('manage_kaption'), mcpClient())).data),
   });
+
+  // mcp-credits-simple.HUB.1-2 — allow_extra_actions, listed while some account said credits_simple; forwarded to
+  // that account's extension (which asks rest-api), its words returned as the result. Never counted by the hub.
+  let creditsTool: RegisteredTool | null = null;
+  const syncCreditsTool = () => {
+    const show = creditsToolVisible(bridge.manageFeatures ?? []);
+    if (show && !creditsTool) {
+      creditsTool = server.registerTool(
+        ALLOW_EXTRA_TOOL,
+        {
+          title: ALLOW_EXTRA_DEFINITION.title,
+          description: ALLOW_EXTRA_DEFINITION.description,
+          inputSchema: ALLOW_EXTRA_DEFINITION.inputSchema.shape,
+          annotations: ALLOW_EXTRA_DEFINITION.annotations,
+        },
+        async (params: Record<string, unknown>) => {
+          try {
+            if (!bridge.connected) return { content: [{ type: 'text' as const, text: creditsAnswer(null).text }], isError: true };
+            const target = (params?.target_session as string | undefined) ?? bridge.sessionWithFeature?.('credits_simple');
+            const called = await bridge.callTool(ALLOW_EXTRA_TOOL, {}, target);
+            const answer = creditsAnswer(called.data);
+            return { content: [{ type: 'text' as const, text: answer.text }], ...(answer.isError ? { isError: true } : {}) };
+          } catch {
+            return { content: [{ type: 'text' as const, text: creditsAnswer(null).text }], isError: true };
+          }
+        },
+      );
+    } else if (!show && creditsTool) {
+      creditsTool.remove();
+      creditsTool = null;
+    }
+  };
+  syncCreditsTool();
+  bridge.onAccountsChanged(syncCreditsTool);
 
   // mcp.LOCAL_HUB.11 — hide the send tools when every connected account reported MCP_LOCAL_SEND off;
   // enable()/disable() send notifications/tools/list_changed to a connected client.
