@@ -98,7 +98,10 @@ describe('mcp-manage-kaption.LIST.2 definitions', () => {
       expect(got.description).toBe(want.description);
       expect(got.annotations).toEqual(want.annotations);
       expect(got._meta).toEqual(want._meta);
-      const props = got.inputSchema.properties as Record<string, any>;
+      const props = { ...(got.inputSchema.properties as Record<string, any>) };
+      // mcp.LOCAL_HUB.4 — the hubs add target_session (routing only, never sent to the extension).
+      expect(props.target_session?.type).toBe('string');
+      delete props.target_session;
       expect(Object.keys(props)).toEqual(Object.keys(want.inputSchema.properties));
       for (const [key, p] of Object.entries<any>(want.inputSchema.properties)) {
         expect(props[key].description).toBe(p.description);

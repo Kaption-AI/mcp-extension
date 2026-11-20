@@ -93,6 +93,15 @@ export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = 
   const cardsFlag = options.cardsFlag ?? new CardsFlag();
   let cardsOn = false;
   const cardTools = new Map<string, { registered: RegisteredTool; meta: Record<string, unknown> | undefined }>();
+  let updateSaid = false;
+  const updateNotice = (): string | null => {
+    if (updateSaid) return null;
+    const info = getUpdateInfo();
+    if (!info) return null;
+    updateSaid = true;
+    return info.message;
+  };
+
   const register = (tool: ToolDefinition): RegisteredTool => {
     const schema = tool.inputSchema;
     const shape = schema instanceof z.ZodObject ? schema.shape : {};
@@ -112,7 +121,8 @@ export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = 
           // mcp.LOCAL_HUB.5 — stdio MCP server registers all ten tools
           // Handle get_api_info locally (no extension needed)
           if (tool.name === 'get_api_info') {
-            const info = apiInfo();
+            const update = getUpdateInfo();
+            const info = { ...apiInfo(), version: getCurrentVersion(), ...(update ? { update_available: update } : {}) };
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }],
             };
@@ -183,6 +193,8 @@ export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = 
             const card = cardFor(tool.name, forwardParams, data);
             if (card) structuredContent = { card };
           }
+          // mcp.LOCAL_HUB.8 — a newer hub on npm: said once per AI app session, as its own line after the answer.
+          const update = updateNotice();
           return {
             content: [
               {
@@ -190,6 +202,7 @@ export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = 
                 text: JSON.stringify(response, null, 2),
               },
               ...(marked.notice ? [{ type: 'text' as const, text: marked.notice }] : []),
+              ...(update ? [{ type: 'text' as const, text: update }] : []),
             ],
             ...(structuredContent ? { structuredContent } : {}),
           };
