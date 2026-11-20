@@ -21,6 +21,19 @@ import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 import { getTokenFilePath } from './auth';
 import { sanitizeClient } from './mcpClient';
 import { toolErrorText } from './toolErrors';
+import {
+  AVATARS_TOOL,
+  AVATARS_TOOL_DESCRIPTION,
+  AVATARS_TOOL_TITLE,
+  avatarIds,
+  avatarsAnswer,
+  avatarsToolMeta,
+  cardFor,
+  cardToolMeta,
+  errorCardFor,
+  isCardTool,
+} from './cards';
+import { CardsFlag } from './cardsFlag';
 
 const HTTP_API_PORT = 7866;
 
@@ -54,7 +67,12 @@ export function apiInfo(): Record<string, unknown> {
   };
 }
 
-export function createMcpServer(bridge: ToolBridge): McpServer {
+export interface McpServerOptions {
+  /** mcp-apps-cards.FLAG.1 — where MCP_APPS_CARDS is asked (tests pass their own). */
+  cardsFlag?: Pick<CardsFlag, 'anyOn'>;
+}
+
+export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = {}): McpServer {
   const server = new McpServer({
     name: 'kaptionai-whatsapp',
     version: getCurrentVersion(),
@@ -71,6 +89,10 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
   };
 
   const sendTools: RegisteredTool[] = [];
+  // mcp-apps-cards.FLAG.1-4 — MCP_APPS_CARDS for the connected accounts (off until the flags worker said on).
+  const cardsFlag = options.cardsFlag ?? new CardsFlag();
+  let cardsOn = false;
+  const cardTools = new Map<string, { registered: RegisteredTool; meta: Record<string, unknown> | undefined }>();
   const register = (tool: ToolDefinition): RegisteredTool => {
     const schema = tool.inputSchema;
     const shape = schema instanceof z.ZodObject ? schema.shape : {};
@@ -98,7 +120,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
 
           if (!bridge.connected) {
             // mcp-local-hub-growth.ERRORS.1 — the cloud's "Extension not connected" text.
-            return errorAnswer(tool.name, new Error('Extension not connected'));
+            return errorAnswer(tool.name, new Error('Extension not connected'), params, cardsOn);
           }
 
           // Handle session query locally — return flat list of all connected WhatsApp accounts
@@ -155,7 +177,12 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           }
 
           // mcp-manage-kaption.UI.2 — the plans UI (and clients without it) read the answer as structuredContent.
-          const structuredContent = tool.name === 'kaption_plans' || tool.name === 'create_kaption_checkout_link' ? plansStructuredContent(data) : undefined;
+          let structuredContent: Record<string, unknown> | undefined = tool.name === 'kaption_plans' || tool.name === 'create_kaption_checkout_link' ? plansStructuredContent(data) : undefined;
+          // mcp-apps-cards.DATA.1-2 — with MCP_APPS_CARDS on, a card tool's answer also carries its card (the text stays).
+          if (cardsOn && isCardTool(tool.name)) {
+            const card = cardFor(tool.name, forwardParams, data);
+            if (card) structuredContent = { card };
+          }
           return {
             content: [
               {
@@ -168,7 +195,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           };
         } catch (error) {
           // mcp-local-hub-growth.ERRORS.1 — the same text the cloud relay answers, not a JSON object.
-          return errorAnswer(tool.name, error);
+          return errorAnswer(tool.name, error, params, cardsOn);
         }
       }
     );
@@ -179,7 +206,72 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     if (MANAGE_TOOL_FEATURE[tool.name]) continue;
     const registered = register(tool);
     if (LOCAL_SEND_TOOLS.includes(tool.name)) sendTools.push(registered);
+    if (isCardTool(tool.name)) cardTools.set(tool.name, { registered, meta: tool._meta });
   }
+
+  /**
+   * mcp-apps-cards.AVATAR.1-5 — get_avatars: listed only while MCP_APPS_CARDS is on and only to the card (visibility
+   * app / openai private). Forwarded to the extension, which reads the pictures in the WhatsApp page; never counted by
+   * the hub. A failure answers no pictures, so the card keeps its initials.
+   */
+  // (server as any): the SDK's registerTool generics are too deep for this schema (TS2589); the shape is plain zod.
+  const avatarsTool: RegisteredTool = (server as any).registerTool(
+    AVATARS_TOOL,
+    {
+      title: AVATARS_TOOL_TITLE,
+      description: AVATARS_TOOL_DESCRIPTION,
+      inputSchema: { ids: z.array(z.string()).max(50) },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      _meta: avatarsToolMeta(),
+    },
+    async (params: Record<string, unknown>) => {
+      const ids = avatarIds(params);
+      let answer = avatarsAnswer(ids, null);
+      if (bridge.connected && ids.length) {
+        try {
+          answer = avatarsAnswer(ids, (await bridge.callTool(AVATARS_TOOL, { ids }, undefined, mcpClient())).data);
+        } catch {
+          // An older extension, or no WhatsApp tab: initials.
+        }
+      }
+      const found = Object.values(answer.avatars).filter(Boolean).length;
+      return {
+        content: [{ type: 'text' as const, text: `${found} of ${ids.length} profile pictures for the Kaption card.` }],
+        structuredContent: answer,
+      };
+    },
+  );
+  avatarsTool.disable();
+
+  /**
+   * mcp-apps-cards.FLAG.1-4 — asks the flags worker for the connected accounts' phones; on a change the card tools gain
+   * or lose _meta.ui and the cards page (tools/list_changed, resources/list_changed). Off: exactly as before.
+   */
+  const syncCards = async (): Promise<boolean> => {
+    let on = false;
+    try {
+      on = await cardsFlag.anyOn(listAccounts(bridge).map(a => a.phone).filter(Boolean));
+    } catch {
+      on = false;
+    }
+    if (on === cardsOn) return on;
+    cardsOn = on;
+    for (const { registered, meta } of cardTools.values()) {
+      registered._meta = on ? { ...(meta ?? {}), ...cardToolMeta() } : meta;
+    }
+    if (on) avatarsTool.enable(); else avatarsTool.disable();
+    if (server.isConnected()) {
+      try { server.sendToolListChanged(); } catch { /* not connected */ }
+      try { Promise.resolve(server.server.sendResourceListChanged()).catch(() => {}); } catch { /* not connected */ }
+    }
+    return on;
+  };
+  const cardsReady = syncCards();
+  bridge.onAccountsChanged(() => { void syncCards(); });
+  // FLAG.4 — a flag change reaches a running hub within 5 minutes (the flag's cache time).
+  const cardsTimer = setInterval(() => { void syncCards(); }, 5 * 60_000);
+  cardsTimer.unref?.();
+  (server as McpServer & { cardsReady?: Promise<boolean> }).cardsReady = cardsReady;
 
   // mcp-manage-kaption.LIST.2 — listed only while some connected account said its family is on; unknown is no. A
   // hidden tool is not registered, so calling it answers the usual unknown-tool error; adding or removing one sends
@@ -200,6 +292,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     visible: () => visible,
     // mcp-manage-kaption.HELP.5 — a guide read answers its live page (kaption://guide/{topic}).
     callHelp: async args => withLiveGuide(args, (await bridge.callTool('kaption_help', args, bridge.sessionWithFeature?.('manage_kaption'), mcpClient())).data),
+    cards: () => cardsOn,
   });
 
   // mcp-credits-simple.HUB.1-2 — allow_extra_actions, listed while some account said credits_simple; forwarded to
@@ -251,9 +344,14 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
   return server;
 }
 
-/** mcp-local-hub-growth.ERRORS.1 — a failed tool call, answered as the cloud relay answers it. */
-function errorAnswer(tool: string, error: unknown) {
-  return { content: [{ type: 'text' as const, text: toolErrorText(tool, error) }], isError: true };
+/**
+ * mcp-local-hub-growth.ERRORS.1 — a failed tool call, answered as the cloud relay answers it.
+ * mcp-apps-cards.SENT.3 — with MCP_APPS_CARDS on, a refused send_message also carries its card.
+ */
+function errorAnswer(tool: string, error: unknown, params?: Record<string, unknown>, cards = false) {
+  const text = toolErrorText(tool, error);
+  const card = cards && isCardTool(tool) ? errorCardFor(tool, params, text) : null;
+  return { content: [{ type: 'text' as const, text }], isError: true, ...(card ? { structuredContent: { card } } : {}) };
 }
 
 /**
