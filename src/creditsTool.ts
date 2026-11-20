@@ -24,7 +24,7 @@ export function creditsToolVisible(accounts: Array<ManageFeatures | null | undef
   return accounts.some(a => a?.credits_simple === true);
 }
 
-const FAILED = "Kaption could not turn extra actions on right now. Ask the user to try again in a moment, or set a monthly limit in Kaption (AI assistants → Usage).";
+const FAILED = "Kaption could not turn extra actions on right now. Ask the user to try again in a moment, or set a monthly limit in Kaption (AI Connectors → Usage).";
 
 /** HUB.2 — the extension's answer ({ok, message}) as the tool result; anything else is the failure words. */
 export function creditsAnswer(data: unknown): { text: string; isError: boolean } {

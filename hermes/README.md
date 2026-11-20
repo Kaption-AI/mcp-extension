@@ -11,7 +11,7 @@ hermes mcp add kaption --url https://mcp.kaptionai.com/mcp --auth oauth --connec
 
 The second command turns on OAuth: a browser window opens, and you sign in with your WhatsApp phone number and a 6-digit code sent to you on WhatsApp. Without it the server answers 401.
 
-You also need Kaption running on your computer: the Kaption extension in WhatsApp Web (Chrome or Edge) or the Kaption desktop app (Mac, Windows), with Cloud MCP turned on (extension: AI Assistants (MCP) › Cloud Bridge › Enable; desktop app: Settings › Cloud MCP).
+You also need Kaption running on your computer: the Kaption extension in WhatsApp Web (Chrome or Edge) or the Kaption desktop app (Mac, Windows), with Cloud MCP turned on (extension: AI Connectors (MCP) › Cloud Bridge › Enable; desktop app: Settings › Cloud MCP).
 
 ## What it can do
 
