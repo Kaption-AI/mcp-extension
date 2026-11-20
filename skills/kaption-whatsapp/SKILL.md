@@ -14,7 +14,7 @@ Kaption connects WhatsApp to AI assistants through MCP. The tools run against th
   - Cursor: `{"mcpServers": {"whatsapp": {"url": "https://mcp.kaptionai.com/mcp"}}}` in `~/.cursor/mcp.json`.
   - Guides: https://kaptionai.com/mcp/claude/, https://kaptionai.com/mcp/chatgpt/, https://kaptionai.com/mcp/cursor/
 - **Local:** `npx -y @kaptionai/mcp-extension@latest` (stdio, Node.js 18+), with the MCP bridge turned on in the extension.
-- On the Kaption side the user must turn on Cloud MCP (extension: AI Assistants (MCP) › Cloud Bridge › Enable; desktop app: Settings › Cloud MCP) and keep Kaption open.
+- On the Kaption side the user must turn on Cloud MCP (extension: AI Connectors (MCP) › Cloud Bridge › Enable; desktop app: Settings › Cloud MCP) and keep Kaption open.
 
 ## Tools
 

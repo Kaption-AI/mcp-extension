@@ -35,7 +35,7 @@
   },
   {
     "name": "kaption_help",
-    "description": "Reads Kaption's own guides and suggested prompts: how Kaption's features and plans work and how Claude and ChatGPT connect to it. action \"list\" returns every guide topic (id, title, one line); \"read\" with a topic returns that guide's text; \"prompts\" returns the prompts Kaption's AI assistants screen suggests, in the user's Kaption language.",
+    "description": "Reads Kaption's own guides and suggested prompts: how Kaption's features and plans work and how Claude and ChatGPT connect to it. action \"list\" returns every guide topic (id, title, one line); \"read\" with a topic returns that guide's text; \"prompts\" returns the prompts Kaption's AI Connectors screen suggests, in the user's Kaption language.",
     "inputSchema": {
       "type": "object",
       "properties": {
