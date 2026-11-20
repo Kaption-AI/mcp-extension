@@ -19,21 +19,44 @@ export function getCurrentVersion(): string {
   return startedWith;
 }
 
-/** Non-blocking check against npm registry. Call once at startup. */
-export function checkForUpdates(): void {
-  const currentVersion = getCurrentVersion();
+/** mcp.LOCAL_HUB.8 — how often a running hub asks npm again (a hub stays up for days; 0.5.21 never saw 0.5.22). */
+export const UPDATE_CHECK_EVERY_MS = 6 * 60 * 60_000;
 
-  fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`)
-    .then((res) => res.json())
-    .then((data: any) => {
-      const latest = data.version;
-      if (latest && latest !== currentVersion) {
-        updateAvailable = { current: currentVersion, latest };
+/** a > b for x.y.z versions (a pre-release or odd part counts as 0); a downgrade is never an update. */
+export function isNewer(a: string, b: string): boolean {
+  const parts = (v: string) => String(v).split('-')[0].split('.').map(n => Number.parseInt(n, 10) || 0);
+  const x = parts(a);
+  const y = parts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  }
+  return false;
+}
+
+/** One non-blocking check against the npm registry. */
+export async function checkOnce(fetchFn: typeof fetch = fetch): Promise<void> {
+  const currentVersion = getCurrentVersion();
+  try {
+    const data: any = await (await fetchFn(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`)).json();
+    const latest = data?.version;
+    if (typeof latest === 'string' && isNewer(latest, currentVersion)) {
+      const fresh = updateAvailable?.latest !== latest;
+      updateAvailable = { current: currentVersion, latest };
+      if (fresh) {
         console.error(`\n[Kaption AI MCP] Update available: ${currentVersion} → ${latest}`);
         console.error(`[Kaption AI MCP] Run: npx ${PACKAGE_NAME}@latest\n`);
       }
-    })
-    .catch(() => { /* offline or registry down — silent */ });
+    }
+  } catch {
+    // offline or registry down — silent
+  }
+}
+
+/** mcp.LOCAL_HUB.8 — checks at startup, then every 6 hours while the hub runs. */
+export function checkForUpdates(): void {
+  void checkOnce();
+  const timer = setInterval(() => { void checkOnce(); }, UPDATE_CHECK_EVERY_MS);
+  timer.unref?.();
 }
 
 /** Returns update info if a newer version is available, null otherwise. */
@@ -41,6 +64,11 @@ export function getUpdateInfo(): { current: string; latest: string; message: str
   if (!updateAvailable) return null;
   return {
     ...updateAvailable,
-    message: `Update available: ${updateAvailable.current} → ${updateAvailable.latest}. Run: npx ${PACKAGE_NAME}@latest`,
+    message: `Kaption MCP update available: ${updateAvailable.current} → ${updateAvailable.latest}. Restart the AI app to pick it up, or run: npx ${PACKAGE_NAME}@latest`,
   };
+}
+
+/** Tests only. */
+export function resetUpdateInfoForTests(): void {
+  updateAvailable = null;
 }
