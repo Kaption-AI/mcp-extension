@@ -21,7 +21,18 @@ import { getUpdateInfo, getCurrentVersion } from './updateCheck';
 import { getTokenFilePath } from './auth';
 import { sanitizeClient } from './mcpClient';
 import { toolErrorText } from './toolErrors';
-import { cardFor, cardToolMeta, errorCardFor, isCardTool } from './cards';
+import {
+  AVATARS_TOOL,
+  AVATARS_TOOL_DESCRIPTION,
+  AVATARS_TOOL_TITLE,
+  avatarIds,
+  avatarsAnswer,
+  avatarsToolMeta,
+  cardFor,
+  cardToolMeta,
+  errorCardFor,
+  isCardTool,
+} from './cards';
 import { CardsFlag } from './cardsFlag';
 
 const HTTP_API_PORT = 7866;
@@ -199,6 +210,40 @@ export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = 
   }
 
   /**
+   * mcp-apps-cards.AVATAR.1-5 — get_avatars: listed only while MCP_APPS_CARDS is on and only to the card (visibility
+   * app / openai private). Forwarded to the extension, which reads the pictures in the WhatsApp page; never counted by
+   * the hub. A failure answers no pictures, so the card keeps its initials.
+   */
+  // (server as any): the SDK's registerTool generics are too deep for this schema (TS2589); the shape is plain zod.
+  const avatarsTool: RegisteredTool = (server as any).registerTool(
+    AVATARS_TOOL,
+    {
+      title: AVATARS_TOOL_TITLE,
+      description: AVATARS_TOOL_DESCRIPTION,
+      inputSchema: { ids: z.array(z.string()).max(50) },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      _meta: avatarsToolMeta(),
+    },
+    async (params: Record<string, unknown>) => {
+      const ids = avatarIds(params);
+      let answer = avatarsAnswer(ids, null);
+      if (bridge.connected && ids.length) {
+        try {
+          answer = avatarsAnswer(ids, (await bridge.callTool(AVATARS_TOOL, { ids }, undefined, mcpClient())).data);
+        } catch {
+          // An older extension, or no WhatsApp tab: initials.
+        }
+      }
+      const found = Object.values(answer.avatars).filter(Boolean).length;
+      return {
+        content: [{ type: 'text' as const, text: `${found} of ${ids.length} profile pictures for the Kaption card.` }],
+        structuredContent: answer,
+      };
+    },
+  );
+  avatarsTool.disable();
+
+  /**
    * mcp-apps-cards.FLAG.1-4 — asks the flags worker for the connected accounts' phones; on a change the card tools gain
    * or lose _meta.ui and the cards page (tools/list_changed, resources/list_changed). Off: exactly as before.
    */
@@ -214,6 +259,7 @@ export function createMcpServer(bridge: ToolBridge, options: McpServerOptions = 
     for (const { registered, meta } of cardTools.values()) {
       registered._meta = on ? { ...(meta ?? {}), ...cardToolMeta() } : meta;
     }
+    if (on) avatarsTool.enable(); else avatarsTool.disable();
     if (server.isConnected()) {
       try { server.sendToolListChanged(); } catch { /* not connected */ }
       try { Promise.resolve(server.server.sendResourceListChanged()).catch(() => {}); } catch { /* not connected */ }

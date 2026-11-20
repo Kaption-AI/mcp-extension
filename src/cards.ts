@@ -31,7 +31,59 @@ export const SEARCH_FIRST_CHATS = 3;
 
 /** mcp-apps-cards.FLAG.3 — what a card tool adds to its _meta while the flag is on. */
 export function cardToolMeta(): Record<string, unknown> {
-  return { ui: { resourceUri: CARDS_UI_URI }, 'openai/outputTemplate': CARDS_UI_URI };
+  // mcp-apps-cards.SHELL.6 — ChatGPT lets the card call a tool only when the tool says widgetAccessible.
+  return { ui: { resourceUri: CARDS_UI_URI }, 'openai/outputTemplate': CARDS_UI_URI, 'openai/widgetAccessible': true };
+}
+
+/**
+ * mcp-apps-cards.AVATAR.1-2 — get_avatars: the profile pictures of the chats a card shows, asked by the card itself
+ * (batched, after it drew its initials) so the tool result stays small. Card-only: hidden from the model in Claude
+ * (visibility app) and ChatGPT (openai/visibility private). The extension answers data: pictures read in the user's
+ * own WhatsApp page; nothing is stored on the way.
+ */
+export const AVATARS_TOOL = 'get_avatars';
+export const AVATARS_MAX_IDS = 8;
+export const AVATARS_MAX_CHARS = 120_000;
+export const AVATARS_TOOL_TITLE = 'Kaption card pictures';
+export const AVATARS_TOOL_DESCRIPTION =
+  'Used only by the Kaption card: the small profile pictures of the chats the card shows. Not for the assistant.';
+
+export function avatarsToolMeta(): Record<string, unknown> {
+  return {
+    ui: { resourceUri: CARDS_UI_URI, visibility: ['app'] },
+    'openai/widgetAccessible': true,
+    'openai/visibility': 'private',
+  };
+}
+
+/** mcp-apps-cards.AVATAR.2 — the ids a card asked for: strings, de-duplicated, at most AVATARS_MAX_IDS. */
+export function avatarIds(args: unknown): string[] {
+  const raw = args && typeof args === 'object' ? (args as Obj).ids : undefined;
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length < 200);
+  return [...new Set(ids)].slice(0, AVATARS_MAX_IDS);
+}
+
+const PICTURE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * mcp-apps-cards.AVATAR.2-4 — the answer the card reads: `{ avatars: { [id]: dataUrl | null } }` for the ids asked.
+ * Only data: JPEG/PNG/WebP pictures pass (never an address); anything else, or past the size budget, is null and the
+ * card keeps its initials.
+ */
+export function avatarsAnswer(ids: string[], data: unknown): { avatars: Record<string, string | null> } {
+  const answer = answerObject(data);
+  const got = answer && answer.avatars && typeof answer.avatars === 'object' ? (answer.avatars as Obj) : {};
+  const avatars: Record<string, string | null> = {};
+  let total = 0;
+  for (const id of ids) {
+    const pic = got[id];
+    if (typeof pic === 'string' && PICTURE.test(pic) && total + pic.length <= AVATARS_MAX_CHARS) {
+      avatars[id] = pic;
+      total += pic.length;
+    } else avatars[id] = null;
+  }
+  return { avatars };
 }
 
 export function isCardTool(name: string): boolean {

@@ -71,7 +71,9 @@ button, input { font: inherit; }
 .box { border: 1px solid var(--ln); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .box.confirming { border-color: var(--danger-line); }
 .row { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--avatar); color: var(--tx2); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex: 0 0 auto; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--avatar); color: var(--tx2); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex: 0 0 auto; overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.head .avatar { width: 28px; height: 28px; font-size: 12px; }
 .grow { flex: 1 1 auto; min-width: 0; }
 .name { font-weight: 600; overflow-wrap: anywhere; }
 .name-link { background: none; border: 0; padding: 0; color: inherit; font-weight: 600; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--ln); text-underline-offset: 3px; overflow-wrap: anywhere; }
@@ -123,6 +125,9 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
   var openai = window.openai || null;
   var host = { locale: "en", timeZone: undefined };
   var state = { card: null, fallback: "", expanded: false, ask: null, busy: null, notes: {}, banner: null };
+  // mcp-apps-cards.AVATAR.4 — pictures by chat id: a data: picture, null (none: initials), "asking". Page memory only.
+  var pics = {};
+  var picsQueued = false;
   var nextId = 1;
   var pending = {};
 
@@ -158,10 +163,50 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
     if (!words.length) return "?";
     return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
   }
-  function avatar(name, isGroup) {
+  var PICTURE = /^data:image\\/(?:jpeg|png|webp);base64,[A-Za-z0-9+\\/]+={0,2}$/;
+  // mcp-apps-cards.AVATAR.3-4 — the person's picture when it arrived; initials (or the group icon) until then or
+  // when there is none. A picture that fails to draw falls back to initials too.
+  function avatar(name, isGroup, chatId) {
     var a = el("div", "avatar");
-    if (isGroup) a.appendChild(icon("group")); else a.textContent = initials(name);
+    var pic = chatId ? pics[chatId] : null;
+    var plain = function () { a.textContent = ""; if (isGroup) a.appendChild(icon("group")); else a.textContent = initials(name); };
+    if (typeof pic === "string" && PICTURE.test(pic)) {
+      var img = el("img");
+      img.alt = ""; img.decoding = "async"; img.src = pic;
+      img.addEventListener("error", function () { pics[chatId] = null; plain(); });
+      a.appendChild(img);
+    } else plain();
+    if (chatId && pics[chatId] === undefined) wantPicture(chatId);
     return a;
+  }
+  // mcp-apps-cards.AVATAR.2 — asked after the card is drawn, at most 8 per call, each id once.
+  var wanted = [];
+  function wantPicture(chatId) {
+    if (wanted.indexOf(chatId) < 0) wanted.push(chatId);
+    if (picsQueued) return;
+    picsQueued = true;
+    setTimeout(loadPictures, 0);
+  }
+  function loadPictures() {
+    picsQueued = false;
+    var ids = wanted.filter(function (id) { return pics[id] === undefined; }).slice(0, 8);
+    wanted = wanted.filter(function (id) { return ids.indexOf(id) < 0 && pics[id] === undefined; });
+    if (!ids.length) return;
+    ids.forEach(function (id) { pics[id] = "asking"; });
+    var done = function (result) {
+      var sc = result && typeof result === "object" ? (result.structuredContent || result) : null;
+      var got = sc && sc.avatars && typeof sc.avatars === "object" ? sc.avatars : {};
+      var any = false;
+      ids.forEach(function (id) {
+        var pic = got[id];
+        if (typeof pic === "string" && PICTURE.test(pic)) { pics[id] = pic; any = true; } else pics[id] = null;
+      });
+      if (any) render();
+      if (wanted.length) wantPicture(wanted[0]);
+    };
+    var failed = function () { ids.forEach(function (id) { pics[id] = null; }); if (wanted.length) wantPicture(wanted[0]); };
+    try { callTool("get_avatars", { ids: ids }).then(function (r) { if (r && r.isError) failed(); else done(r); }, failed); }
+    catch (e) { failed(); }
   }
   function firstName(name) {
     var s = String(name || "");
@@ -224,9 +269,9 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
   }
 
   // ─── Render ────────────────────────────────────────────────────────────
-  function header(title, sub, pill, pillCls) {
+  function header(title, sub, pill, pillCls, lead) {
     var h = el("div", "head");
-    h.appendChild(el("div", "logo", "K"));
+    h.appendChild(lead || el("div", "logo", "K"));
     var t = el("div", "titles");
     t.appendChild(el("div", "title", title));
     if (sub) t.appendChild(el("div", "sub", sub));
@@ -292,7 +337,7 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
   function searchGroup(g, query) {
     var box = el("div", "box");
     var row = el("div", "row");
-    row.appendChild(avatar(g.name, g.is_group));
+    row.appendChild(avatar(g.name, g.is_group, g.chat_id));
     var mid = el("div", "grow");
     if (g.link) {
       var link = el("button", "name-link", g.name);
@@ -336,7 +381,8 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
     else if (card.status === "not_sent") { label = "Not sent"; cls = "bad"; }
     else { label = card.status === "sending" ? "Sending" : "Queued"; cls = "wait"; }
     var title = card.status === "sent" ? "Sent to " + card.to : SENT_TITLES[card.status] || "Message";
-    c.appendChild(header(title, card.status === "sent" ? "From your WhatsApp" : "To " + card.to, label, cls));
+    // mcp-apps-cards.AVATAR.3 — the person (or group) the message is for, at the top.
+    c.appendChild(header(title, card.status === "sent" ? "From your WhatsApp" : "To " + card.to, label, cls, card.chat_id || card.to ? avatar(card.to, card.is_group, card.chat_id) : null));
 
     if (card.text || card.attachment) {
       var chat = el("div", "chat");
@@ -458,7 +504,7 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
     var asking = state.ask && state.ask.id === it.id ? state.ask : null;
     var box = el("div", "box" + (asking && asking.step === "confirm" && asking.action !== "change" ? " confirming" : ""));
     var row = el("div", "row");
-    row.appendChild(avatar(it.name, it.is_group));
+    row.appendChild(avatar(it.name, it.is_group, it.chat_id));
     var mid = el("div", "grow");
     mid.appendChild(el("div", "name", it.name));
     if (it.text) mid.appendChild(el("div", "muted ellipsis", it.text));
@@ -594,13 +640,22 @@ mark { background: var(--mark); color: var(--mark-tx); border-radius: 3px; paddi
     lastHeight = h;
     notify("ui/notifications/size-changed", { width: Math.ceil(document.documentElement.scrollWidth), height: h });
   }
+  var hostVars = [];
   function applyContext(ctx) {
     if (!ctx || typeof ctx !== "object") return;
-    if (ctx.theme === "dark" || ctx.theme === "light") document.documentElement.setAttribute("data-theme", ctx.theme);
+    var root = document.documentElement;
     var vars = ctx.styles && ctx.styles.variables;
+    var themed = ctx.theme === "dark" || ctx.theme === "light";
+    // mcp-apps-cards.SHELL.2 — a theme change without the host's new colours drops the old ones (our own palette for
+    // that theme takes over), so text never ends up light on light.
+    if (themed && ctx.theme !== root.getAttribute("data-theme") && !(vars && typeof vars === "object")) {
+      hostVars.forEach(function (k) { root.style.removeProperty(k); });
+      hostVars = [];
+    }
+    if (themed) root.setAttribute("data-theme", ctx.theme);
     if (vars && typeof vars === "object") {
       Object.keys(vars).forEach(function (k) {
-        if (/^--[a-z0-9-]+$/.test(k) && typeof vars[k] === "string") document.documentElement.style.setProperty(k, vars[k]);
+        if (/^--[a-z0-9-]+$/.test(k) && typeof vars[k] === "string") { root.style.setProperty(k, vars[k]); if (hostVars.indexOf(k) < 0) hostVars.push(k); }
       });
     }
     if (typeof ctx.locale === "string") host.locale = ctx.locale;

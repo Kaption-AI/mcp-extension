@@ -7,6 +7,11 @@ import {
   CARDS_UI_URI,
   cardFor,
   cardToolMeta,
+  avatarIds,
+  avatarsAnswer,
+  avatarsToolMeta,
+  AVATARS_MAX_CHARS,
+  AVATARS_MAX_IDS,
   chatLink,
   deliveryOf,
   errorCardFor,
@@ -22,7 +27,7 @@ const A: any = answers;
 describe('mcp-apps-cards.FLAG.3 card tools', () => {
   it('link the one cards page (MCP Apps and ChatGPT)', () => {
     expect(CARD_TOOLS).toEqual(['query', 'send_message', 'manage_scheduled_messages', 'list_scheduled_messages', 'get_scheduled_message']);
-    expect(cardToolMeta()).toEqual({ ui: { resourceUri: 'ui://kaption/cards.html' }, 'openai/outputTemplate': 'ui://kaption/cards.html' });
+    expect(cardToolMeta()).toEqual({ ui: { resourceUri: 'ui://kaption/cards.html' }, 'openai/outputTemplate': 'ui://kaption/cards.html', 'openai/widgetAccessible': true });
     expect(CARDS_UI_URI).toBe('ui://kaption/cards.html');
   });
 
@@ -187,5 +192,33 @@ describe('mcp-apps-cards.SCHEDULED', () => {
 
   it('an answer that is not a list or a message: no card', () => {
     expect(cardFor('manage_scheduled_messages', { action: 'create' }, { success: false })).toBeNull();
+  });
+});
+
+describe('mcp-apps-cards.AVATAR get_avatars data', () => {
+  const PIC = 'data:image/webp;base64,UklGRg==';
+  it('AVATAR.1 — card-only tool meta', () => {
+    expect(avatarsToolMeta()).toEqual({ ui: { resourceUri: CARDS_UI_URI, visibility: ['app'] }, 'openai/widgetAccessible': true, 'openai/visibility': 'private' });
+  });
+  it('AVATAR.2 — ids: strings only, de-duplicated, at most 8', () => {
+    const ids = [...Array(12)].map((_, i) => `55510${i}@c.us`);
+    expect(avatarIds({ ids: [...ids, ids[0], 4, null, ''] })).toHaveLength(AVATARS_MAX_IDS);
+    expect(avatarIds({ ids: ['a', 'a', 'b'] })).toEqual(['a', 'b']);
+    expect(avatarIds(null)).toEqual([]);
+    expect(avatarIds({ ids: 'a' })).toEqual([]);
+  });
+  it('AVATAR.2-4 — only data: JPEG/PNG/WebP pass, for the ids asked; addresses and junk are null', () => {
+    const answer = { avatars: { a: PIC, b: 'https://pps.whatsapp.net/v/x.jpg', c: 'data:image/svg+xml;base64,PHN2Zz4=', d: null, extra: PIC } };
+    expect(avatarsAnswer(['a', 'b', 'c', 'd', 'e'], answer)).toEqual({ avatars: { a: PIC, b: null, c: null, d: null, e: null } });
+    expect(avatarsAnswer(['a'], JSON.stringify(answer)).avatars.a).toBe(PIC);
+    expect(avatarsAnswer(['a'], null)).toEqual({ avatars: { a: null } });
+  });
+  it('AVATAR.2 — the answer stays under the size budget', () => {
+    const big = 'data:image/jpeg;base64,' + 'A'.repeat(40_000);
+    const ids = [...Array(8)].map((_, i) => `id${i}`);
+    const out = avatarsAnswer(ids, { avatars: Object.fromEntries(ids.map((id) => [id, big])) });
+    const total = Object.values(out.avatars).reduce((n, v) => n + (v ? v.length : 0), 0);
+    expect(total).toBeLessThanOrEqual(AVATARS_MAX_CHARS);
+    expect(Object.values(out.avatars).filter(Boolean)).toHaveLength(2);
   });
 });

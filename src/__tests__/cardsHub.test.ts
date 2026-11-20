@@ -5,7 +5,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ResourceListChangedNotificationSchema, ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Bridge } from '../bridge';
 import { createMcpServer } from '../mcpServer';
-import { CARD_TOOLS, CARDS_UI_URI } from '../cards';
+import { AVATARS_TOOL, CARD_TOOLS, CARDS_UI_URI } from '../cards';
 import { CARDS_UI_HTML, CARDS_UI_MIME_TYPE } from '../cardsUi';
 import { CardsFlag, CARDS_FLAG_TTL_MS, flagOn } from '../cardsFlag';
 import answers from './fixtures/mcp-apps-cards-answers.json';
@@ -13,6 +13,7 @@ import answers from './fixtures/mcp-apps-cards-answers.json';
 jest.mock('../updateCheck', () => ({ getUpdateInfo: () => null, getCurrentVersion: () => '0.0.0-test', checkForUpdates: () => {} }));
 
 const A: any = answers;
+const PIC = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const flush = () => new Promise(r => setTimeout(r, 20));
 
 /** One account whose extension answers like the fixture (send_message refused when the text says so). */
@@ -30,6 +31,7 @@ function fakeExtension(bridge: Bridge, sessionId: string, phone: string) {
       }
       result = A.sent_read;
     }
+    if (req.method === 'get_avatars') result = { avatars: { '5511987654821@c.us': PIC, '5511987654822@c.us': 'https://pps.whatsapp.net/x.jpg' } };
     if (req.method === 'manage_scheduled_messages') result = req.params.action === 'list' ? A.scheduled_list : A.scheduled_get;
     setImmediate(() => bridge.handleResponse(JSON.stringify({ jsonrpc: '2.0', id: req.id, result })));
   });
@@ -77,7 +79,7 @@ describe('mcp-apps-cards.FLAG.3 on', () => {
     const { client } = await hub({ value: true });
     const tools = (await client.listTools()).tools;
     for (const name of CARD_TOOLS) {
-      expect(tools.find(t => t.name === name)?._meta).toEqual({ ui: { resourceUri: CARDS_UI_URI }, 'openai/outputTemplate': CARDS_UI_URI });
+      expect(tools.find(t => t.name === name)?._meta).toEqual({ ui: { resourceUri: CARDS_UI_URI }, 'openai/outputTemplate': CARDS_UI_URI, 'openai/widgetAccessible': true });
     }
     expect(tools.find(t => t.name === 'list_contacts')?._meta).toBeUndefined();
     const listed = (await client.listResources()).resources.find(r => r.uri === CARDS_UI_URI);
@@ -170,5 +172,20 @@ describe('mcp-apps-cards.FLAG.1 the flags worker lookup', () => {
     } finally {
       process.env.KAPTION_CARDS_FLAG = prev;
     }
+  });
+});
+
+describe('mcp-apps-cards.AVATAR the card-only picture tool (hub)', () => {
+  it('AVATAR.1 — not listed while off', async () => {
+    const { client } = await hub({ value: false });
+    expect((await client.listTools()).tools.map(t => t.name)).not.toContain(AVATARS_TOOL);
+  });
+  it('AVATAR.1-4 — listed only to the card while on; forwarded; only data: pictures come back', async () => {
+    const { client } = await hub({ value: true });
+    const tool = (await client.listTools()).tools.find(t => t.name === AVATARS_TOOL)!;
+    expect(tool._meta).toMatchObject({ ui: { resourceUri: CARDS_UI_URI, visibility: ['app'] }, 'openai/visibility': 'private' });
+    const r: any = await client.callTool({ name: AVATARS_TOOL, arguments: { ids: ['5511987654821@c.us', '5511987654822@c.us'] } });
+    expect(r.structuredContent).toEqual({ avatars: { '5511987654821@c.us': PIC, '5511987654822@c.us': null } });
+    expect(r.content[0].text).not.toContain('base64');
   });
 });
