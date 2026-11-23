@@ -34,6 +34,8 @@ export interface ManageFeatures {
   export_chat?: boolean;
   /** mcp-credits-simple.HUB.1 — MCP_CREDITS_SIMPLE on for this account (allow_extra_actions, creditsTool.ts). */
   credits_simple?: boolean;
+  /** kally-followups.FOLLOWUPS.1 — KALLY_FOLLOWUPS on for this account (find_followups). */
+  followups?: boolean;
 }
 
 /** mcp-manage-kaption.LIST.2 — which `features` key shows each tool. */
@@ -58,11 +60,12 @@ export const MANAGE_TOOL_FEATURE: Readonly<Record<string, keyof ManageFeatures>>
   get_community: 'channels_communities',
   get_community_digest: 'channels_communities',
   export_chat: 'export_chat',
+  find_followups: 'followups',
 });
 
 export const MANAGE_KAPTION_TOOLS: readonly string[] = Object.freeze(Object.keys(MANAGE_TOOL_FEATURE));
 
-const FEATURE_KEYS: Array<keyof ManageFeatures> = ['manage_kaption', 'business_agent', 'plans', 'scheduled_status', 'channels_communities', 'export_chat', 'credits_simple'];
+const FEATURE_KEYS: Array<keyof ManageFeatures> = ['manage_kaption', 'business_agent', 'plans', 'scheduled_status', 'channels_communities', 'export_chat', 'credits_simple', 'followups'];
 
 /** Only booleans are kept; anything else (missing, "yes", 1) is unknown, which counts as no. */
 export function readManageFeatures(features: unknown): ManageFeatures {

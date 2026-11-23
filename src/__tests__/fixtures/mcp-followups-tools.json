@@ -1,0 +1,61 @@
+[
+  {
+    "name": "find_followups",
+    "title": "Find follow-ups",
+    "description": "Find, in one call, the WhatsApp chats that need a follow-up from the user: chats where the newest message is from the other person and still unanswered, and chats where the user promised something in their own messages (\"I'll get back to you\", \"let me check\", \"once ready I'll send it over\", \"te aviso\", \"vou te mandar\", in English, Spanish, Portuguese, French, German and Italian). Use it for \"who am I waiting to answer\", \"what did I promise\", \"which chats did I say I'd get back to\", instead of reading chats one by one. Scans the chats active in the last `days` (default 30, at most 90), newest first, from Kaption's copy on this computer; groups and archived chats only when asked. Each chat comes with: unanswered (since when the other side waits, how many messages, a short quote; closing true for a last \"thanks\"/\"ok\", which needs no answer), and promises (the quoted sentence, when, fulfilled \"no\" (nothing sent after it) or \"unclear\" (messages sent after, none looks like the promised thing), and due when it names a day, overdue when that day passed). Promises a later message likely kept (a file sent, \"here it is\") are only counted in kept_promises. counts holds the exact numbers of this page. Pages: when complete is false, call again with cursor = next_cursor. Changes nothing.\n\nExamples:\n  { }\n  { days: 14, include_groups: true }\n  { kinds: \"promises\", time_zone: \"America/Sao_Paulo\" }\n  { cursor: \"40\" }",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90,
+          "description": "Chats active in the last N days (default 30, at most 90)"
+        },
+        "kinds": {
+          "type": "string",
+          "enum": [
+            "all",
+            "unanswered",
+            "promises"
+          ],
+          "description": "all (default), unanswered (only chats waiting for the user's answer) or promises (only the user's promises)"
+        },
+        "include_groups": {
+          "type": "boolean",
+          "description": "Include groups (default false)"
+        },
+        "include_archived": {
+          "type": "boolean",
+          "description": "Include archived chats (default false)"
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "The user's IANA time zone for due dates (default UTC), e.g. \"America/Sao_Paulo\""
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Chats per page (default 25, at most 50)"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "next_cursor of the previous page"
+        },
+        "target_session": {
+          "type": "string",
+          "description": "Session ID for multi-account routing"
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Find follow-ups",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+]

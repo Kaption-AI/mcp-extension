@@ -877,6 +877,24 @@ export const TOOLS: ToolDefinition[] = [
       target_session: z.string().optional().describe("Session ID for multi-account routing"),
     }),
   },
+  // kally-followups.FOLLOWUPS.1 (kaptionai features/assistant/kally-followups.feature.yaml) — who is waiting for the user's
+  // answer and what the user promised, in one bounded read of the copy on that computer. Listed only while a connected
+  // extension said features.followups (KALLY_FOLLOWUPS, manageKaption.ts). Verbatim from kaptionai
+  // kext/scripts/mcp-followups-tools.json; the same on the local hub and the cloud relay.
+  {
+    name: "find_followups",
+    description: "Find, in one call, the WhatsApp chats that need a follow-up from the user: chats where the newest message is from the other person and still unanswered, and chats where the user promised something in their own messages (\"I'll get back to you\", \"let me check\", \"once ready I'll send it over\", \"te aviso\", \"vou te mandar\", in English, Spanish, Portuguese, French, German and Italian). Use it for \"who am I waiting to answer\", \"what did I promise\", \"which chats did I say I'd get back to\", instead of reading chats one by one. Scans the chats active in the last `days` (default 30, at most 90), newest first, from Kaption's copy on this computer; groups and archived chats only when asked. Each chat comes with: unanswered (since when the other side waits, how many messages, a short quote; closing true for a last \"thanks\"/\"ok\", which needs no answer), and promises (the quoted sentence, when, fulfilled \"no\" (nothing sent after it) or \"unclear\" (messages sent after, none looks like the promised thing), and due when it names a day, overdue when that day passed). Promises a later message likely kept (a file sent, \"here it is\") are only counted in kept_promises. counts holds the exact numbers of this page. Pages: when complete is false, call again with cursor = next_cursor. Changes nothing.\n\nExamples:\n  { }\n  { days: 14, include_groups: true }\n  { kinds: \"promises\", time_zone: \"America/Sao_Paulo\" }\n  { cursor: \"40\" }",
+    inputSchema: z.object({
+      days: z.number().int().min(1).max(90).optional().describe("Chats active in the last N days (default 30, at most 90)"),
+      kinds: z.enum(["all", "unanswered", "promises"]).optional().describe("all (default), unanswered (only chats waiting for the user's answer) or promises (only the user's promises)"),
+      include_groups: z.boolean().optional().describe("Include groups (default false)"),
+      include_archived: z.boolean().optional().describe("Include archived chats (default false)"),
+      time_zone: z.string().optional().describe("The user's IANA time zone for due dates (default UTC), e.g. \"America/Sao_Paulo\""),
+      limit: z.number().int().min(1).max(50).optional().describe("Chats per page (default 25, at most 50)"),
+      cursor: z.string().optional().describe("next_cursor of the previous page"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
+    }),
+  },
 ];
 
 /**
@@ -961,6 +979,7 @@ const TOOL_TITLES: Record<string, string> = {
   list_scheduled_channel_posts: "List scheduled channel posts",
   get_community_digest: "Get community digest",
   export_chat: "Export chat",
+  find_followups: "Find follow-ups",
 };
 
 // Safety annotations use OpenAI's review definitions:
@@ -1020,6 +1039,7 @@ const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   list_scheduled_channel_posts: { title: "List scheduled channel posts", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   get_community_digest: { title: "Get community digest", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   export_chat: { title: "Export chat", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  find_followups: { title: "Find follow-ups", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 
 // Every tool carries its title in annotations.title too (Claude's Connectors Directory reads it there).

@@ -20,6 +20,7 @@ import { TOOLS, getToolsForMCP } from '../tools';
 import canonical from './fixtures/mcp-manage-tools.json';
 import channelsCanonical from './fixtures/mcp-channels-communities-tools.json';
 import exportChatCanonical from './fixtures/mcp-export-chat-tools.json';
+import followupsCanonical from './fixtures/mcp-followups-tools.json';
 
 jest.mock('../updateCheck', () => ({ getUpdateInfo: () => null, getCurrentVersion: () => '0.0.0-test', checkForUpdates: () => {} }));
 
@@ -86,7 +87,7 @@ describe('mcp-manage-kaption.LIST.2 definitions', () => {
     // The status tools (scheduled-status.MCP), then the channels and communities tools, then export_chat
     // (chat-export.MCP), follow the manage block.
     const names = TOOLS.map(t => t.name);
-    const tail = channelsCanonical.length + exportChatCanonical.length + 2;
+    const tail = channelsCanonical.length + exportChatCanonical.length + followupsCanonical.length + 2;
     expect(names.slice(-tail, -tail + 2)).toEqual(['manage_status', 'list_status_posts']);
     expect(names.slice(-canonical.length - tail, -tail)).toEqual(canonical.map(t => t.name));
     const bridge = new Bridge();
@@ -569,7 +570,7 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
 
 describe('chat-export.MCP export_chat on the hub', () => {
   it('chat-export.MCP.2, MCP.4 — is the pinned kaptionai definition, verbatim (read-only), last', async () => {
-    expect(TOOLS[TOOLS.length - 1].name).toBe('export_chat');
+    expect(TOOLS[TOOLS.length - 2].name).toBe('export_chat');
     const want = (exportChatCanonical as any[])[0];
     const got = getToolsForMCP().find(t => t.name === 'export_chat')!;
     expect({ ...got, inputSchema: withoutClosedObjects(got.inputSchema) }).toEqual(want);
@@ -612,6 +613,57 @@ describe('chat-export.MCP export_chat on the hub', () => {
     expect(old).toEqual([]);
     expect(fresh).toEqual([]);
     const bad: any = await mcp.client.callTool({ name: 'export_chat', arguments: { chat_id: '1@c.us', media: ['gif'] } });
+    expect(bad.isError).toBe(true);
+    expect(owner).toHaveLength(1);
+    await mcp.client.close();
+  });
+});
+
+describe('kally-followups.FOLLOWUPS.1 find_followups on the hub', () => {
+  it('kally-followups.FOLLOWUPS.1 — is the pinned kaptionai definition, verbatim (read-only), last', async () => {
+    expect(TOOLS[TOOLS.length - 1].name).toBe('find_followups');
+    const want = (followupsCanonical as any[])[0];
+    const got = getToolsForMCP().find(t => t.name === 'find_followups')!;
+    // getToolsForMCP's simple converter has no integer bounds; the list the SDK serves (below) is compared verbatim.
+    expect({ name: got.name, title: got.title, description: got.description, annotations: got.annotations })
+      .toEqual({ name: want.name, title: want.title, description: want.description, annotations: want.annotations });
+    expect(got.annotations?.readOnlyHint).toBe(true);
+    const bridge = new Bridge();
+    fakeExtension(bridge, 'sess_owner', { followups: true });
+    const mcp = await connectClient(bridge);
+    const listed = (await mcp.client.listTools()).tools.find(t => t.name === 'find_followups')!;
+    expect(listed.title).toBe(want.title);
+    expect(listed.description).toBe(want.description);
+    expect(listed.annotations).toEqual(want.annotations);
+    expect(withoutClosedObjects(listed.inputSchema)).toEqual(withoutClosedObjects(want.inputSchema));
+    await mcp.client.close();
+  });
+
+  it('kally-followups.FOLLOWUPS.1 — the key: only followups true shows it', () => {
+    expect([...visibleManageTools([{ followups: true }])]).toEqual(['find_followups']);
+    expect([...visibleManageTools([{ manage_kaption: true, export_chat: true }])]).not.toContain('find_followups');
+    expect(readManageFeatures({ followups: true, local_send: true })).toEqual({ followups: true });
+    expect(readManageFeatures({ followups: 'true' })).toEqual({});
+  });
+
+  it('kally-followups.FOLLOWUPS.1 — hidden for an extension without the flag; appears with list_changed; called on the account that said so', async () => {
+    const bridge = new Bridge();
+    const mcp = await connectClient(bridge);
+    const old = fakeExtension(bridge, 'sess_old', { local_send: true, manage_kaption: true, export_chat: true });
+    await flush();
+    expect(await mcp.names()).not.toContain('find_followups');
+    const hidden: any = await mcp.client.callTool({ name: 'find_followups', arguments: {} });
+    expect(hidden.isError).toBe(true);
+    const changes = mcp.changed.tools;
+    const owner = fakeExtension(bridge, 'sess_owner', { followups: true });
+    await flush();
+    expect(await mcp.names()).toContain('find_followups');
+    expect(mcp.changed.tools).toBeGreaterThan(changes);
+    const res: any = await mcp.client.callTool({ name: 'find_followups', arguments: { days: 14, kinds: 'promises' } });
+    expect(res.isError).toBeFalsy();
+    expect(owner).toEqual([{ method: 'find_followups', params: { days: 14, kinds: 'promises' } }]);
+    expect(old).toEqual([]);
+    const bad: any = await mcp.client.callTool({ name: 'find_followups', arguments: { days: 365 } });
     expect(bad.isError).toBe(true);
     expect(owner).toHaveLength(1);
     await mcp.client.close();
