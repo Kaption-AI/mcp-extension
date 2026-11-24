@@ -1,5 +1,7 @@
 # @kaptionai/mcp-extension
 
+[![Kaption-AI/mcp-extension MCP server](https://glama.ai/mcp/servers/Kaption-AI/mcp-extension/badges/score.svg)](https://glama.ai/mcp/servers/Kaption-AI/mcp-extension)
+
 MCP server that lets AI assistants read and manage your WhatsApp conversations through the [KaptionAI](https://kaptionai.com) Chrome extension. Also supports [WebMCP](https://webmachinelearning.github.io/webmcp/) for zero-config browser-native AI tool discovery.
 
 ```
