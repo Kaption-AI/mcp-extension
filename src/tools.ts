@@ -883,8 +883,8 @@ export const TOOLS: ToolDefinition[] = [
   },
   // kaption-links.MCP.1, MCP.10 (kaptionai features/links/kaption-links.feature.yaml) — Kaption Links: short links that
   // count clicks. Listed only while a connected extension said features.kaption_links (manageKaption.ts) and forwarded
-  // to it by name; the account core answers. Verbatim from kaptionai kext/scripts/mcp-links-tools.json (no
-  // target_session: the call goes to the account that said kaption_links).
+  // to it by name; the account core answers. Verbatim from kaptionai kext/scripts/mcp-links-tools.json; target_session
+  // picks the number (mcp.LOCAL_HUB.4), else the call goes to the account that said kaption_links.
   {
     name: "create_tracked_links",
     description: [
@@ -901,6 +901,7 @@ export const TOOLS: ToolDefinition[] = [
         post_id: z.string().optional().describe("Any id the user's post goes by, to group its clicks (at most 128 characters)"),
         chat_id: z.string().optional().describe("The channel (…@newsletter), group (…@g.us) or status@broadcast the link is posted to"),
       })).min(1).max(20).describe("The addresses to track (1 to 20)"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
     }),
   },
   // kaption-links.MCP.2, MCP.10
@@ -920,6 +921,7 @@ export const TOOLS: ToolDefinition[] = [
       chat_id: z.string().optional().describe("Only the links posted to this channel, group or status@broadcast"),
       limit: z.number().int().min(1).max(100).optional().describe("Links per page (default 20, at most 100)"),
       cursor: z.string().optional().describe("next_cursor of the previous page"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
     }),
   },
   // kaption-links.MCP.3, MCP.8, MCP.10
@@ -941,6 +943,7 @@ export const TOOLS: ToolDefinition[] = [
       granularity: z.enum(["day", "hour"]).optional().describe("With link: clicks per day (default) or per hour"),
       from: z.string().optional().describe("Start, as a date or date and time (ISO 8601). Default: the last 30 days (2 days per hour)"),
       to: z.string().optional().describe("End, as a date or date and time (ISO 8601). Default: now"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
     }),
   },
 ];

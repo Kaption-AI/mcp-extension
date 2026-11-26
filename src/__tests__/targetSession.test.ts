@@ -14,7 +14,7 @@ jest.mock('../updateCheck', () => ({
   checkForUpdates: () => {},
 }));
 
-const FEATURES = { manage_kaption: true, business_agent: true, plans: true, local_send: true, scheduled_status: true, channels_communities: true, credits_simple: false };
+const FEATURES = { manage_kaption: true, business_agent: true, plans: true, local_send: true, scheduled_status: true, channels_communities: true, credits_simple: false, kaption_links: true };
 
 function account(bridge: Bridge, sessionId: string, phone: string) {
   const calls: Array<{ method: string; params: any }> = [];
@@ -42,16 +42,10 @@ async function hub() {
 
 /** Tools answered by the hub itself, without any WhatsApp account. */
 const HUB_ONLY = ['get_api_info'];
-/**
- * kaption-links.MCP.10 — the Kaption Links tools are the extension's pinned definitions verbatim
- * (kext/scripts/mcp-links-tools.json), which have no target_session; the hub sends them to the account that said
- * features.kaption_links. Remove from this list once the pinned file adds target_session.
- */
-const PINNED_WITHOUT_TARGET = ['create_tracked_links', 'list_tracked_links', 'get_link_clicks'];
 
 describe('mcp.LOCAL_HUB.4 target_session on every tool that reaches an account', () => {
   it('every tool definition except the hub-only ones declares target_session', () => {
-    const missing = TOOLS.filter(t => !HUB_ONLY.includes(t.name) && !PINNED_WITHOUT_TARGET.includes(t.name))
+    const missing = TOOLS.filter(t => !HUB_ONLY.includes(t.name))
       .filter(t => !('target_session' in ((t.inputSchema as any).shape ?? {})))
       .map(t => t.name);
     expect(missing).toEqual([]);
@@ -62,7 +56,7 @@ describe('mcp.LOCAL_HUB.4 target_session on every tool that reaches an account',
     const listed = (await client.listTools()).tools;
     expect(listed.length).toBeGreaterThan(30);
     for (const tool of listed) {
-      if (HUB_ONLY.includes(tool.name) || PINNED_WITHOUT_TARGET.includes(tool.name)) continue;
+      if (HUB_ONLY.includes(tool.name)) continue;
       expect([tool.name, Object.keys((tool.inputSchema as any).properties ?? {})]).toEqual([tool.name, expect.arrayContaining(['target_session'])]);
     }
   });
@@ -79,6 +73,9 @@ describe('mcp.LOCAL_HUB.4 target_session on every tool that reaches an account',
     ['get_contact_note', { contact_id: '15555550100@c.us' }],
     ['get_kaption_settings', {}],
     ['create_kaption_checkout_link', { plan: 'pro' }],
+    // kaption-links.MCP.10 — the Links tools follow mcp.LOCAL_HUB.4 too.
+    ['list_tracked_links', {}],
+    ['get_link_clicks', { link: 'l_0123456789abcdef' }],
   ])('%s runs on the session asked for, not the last one used', async (name, args) => {
     const { client, a, b } = await hub();
     // The other number is used last, so routing by "most recent" would pick it.

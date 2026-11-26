@@ -31,12 +31,20 @@
                 "description": "The channel (…@newsletter), group (…@g.us) or status@broadcast the link is posted to"
               }
             },
-            "required": ["url"],
+            "required": [
+              "url"
+            ],
             "additionalProperties": false
           }
+        },
+        "target_session": {
+          "type": "string",
+          "description": "Session ID for multi-account routing"
         }
       },
-      "required": ["links"],
+      "required": [
+        "links"
+      ],
       "additionalProperties": false
     },
     "annotations": {
@@ -75,6 +83,10 @@
         "cursor": {
           "type": "string",
           "description": "next_cursor of the previous page"
+        },
+        "target_session": {
+          "type": "string",
+          "description": "Session ID for multi-account routing"
         }
       },
       "additionalProperties": false
@@ -108,7 +120,10 @@
         },
         "granularity": {
           "type": "string",
-          "enum": ["day", "hour"],
+          "enum": [
+            "day",
+            "hour"
+          ],
           "description": "With link: clicks per day (default) or per hour"
         },
         "from": {
@@ -118,6 +133,10 @@
         "to": {
           "type": "string",
           "description": "End, as a date or date and time (ISO 8601). Default: now"
+        },
+        "target_session": {
+          "type": "string",
+          "description": "Session ID for multi-account routing"
         }
       },
       "additionalProperties": false
