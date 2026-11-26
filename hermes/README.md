@@ -7,9 +7,12 @@ Connects Hermes to your own WhatsApp through Kaption's hosted MCP server (`https
 ```bash
 hermes plugins install kaption-whatsapp
 hermes mcp add kaption --url https://mcp.kaptionai.com/mcp --auth oauth --connect-timeout 300
+hermes config set mcp_servers.kaption.trust untrusted
 ```
 
 The second command turns on OAuth: a browser window opens, and you sign in with your WhatsApp phone number and a 6-digit code sent to you on WhatsApp. Without it the server answers 401.
+
+Run the third command too: `hermes mcp add` writes your own `mcp_servers.kaption` entry, which replaces the plugin's server and has no `trust` key, and a missing key means full trust. Setting it back to `untrusted` keeps Hermes asking before every send, schedule or settings change from your WhatsApp number, and refusing them in unattended runs.
 
 You also need Kaption running on your computer: the Kaption extension in WhatsApp Web (Chrome or Edge) or the Kaption desktop app (Mac, Windows), with Cloud MCP turned on (extension: AI Connectors (MCP) › Cloud Bridge › Enable; desktop app: Settings › Cloud MCP).
 
