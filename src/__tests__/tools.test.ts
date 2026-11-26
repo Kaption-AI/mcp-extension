@@ -111,6 +111,31 @@ describe('tools', () => {
     });
   });
 
+  describe('get_analytics schema (advanced-analytics.MCP)', () => {
+    const schema = getToolByName('get_analytics')!.inputSchema;
+    const description = getToolByName('get_analytics')!.description;
+    const sections = ['community_activity', 'channel_posts', 'post_detail', 'community_changes', 'message_reads'];
+
+    it('advanced-analytics.MCP.5 — lists community_activity and the new sections in the enum and the description', () => {
+      for (const section of sections) {
+        expect(schema.safeParse({ section }).success).toBe(true);
+        expect(description).toContain(`  ${section} `);
+      }
+    });
+
+    it('advanced-analytics.MCP.1 — channel_posts takes sort views|reactions|forwards|date', () => {
+      for (const sort of ['views', 'reactions', 'forwards', 'date']) {
+        expect(schema.safeParse({ section: 'channel_posts', chat_id: '120363000000000001@newsletter', sort }).success).toBe(true);
+      }
+      expect(schema.safeParse({ section: 'channel_posts', sort: 'likes' }).success).toBe(false);
+    });
+
+    it('advanced-analytics.MCP.2 — post_detail takes chat_id + post_id as strings', () => {
+      expect(schema.safeParse({ section: 'post_detail', chat_id: '120363000000000001@newsletter', post_id: '123' }).success).toBe(true);
+      expect(schema.safeParse({ section: 'post_detail', post_id: 123 }).success).toBe(false);
+    });
+  });
+
   describe('query tool schema', () => {
     let schema: Record<string, any>;
 
