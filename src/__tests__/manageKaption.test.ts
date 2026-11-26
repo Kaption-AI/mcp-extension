@@ -20,6 +20,7 @@ import { TOOLS, getToolsForMCP } from '../tools';
 import canonical from './fixtures/mcp-manage-tools.json';
 import channelsCanonical from './fixtures/mcp-channels-communities-tools.json';
 import exportChatCanonical from './fixtures/mcp-export-chat-tools.json';
+import linksCanonical from './fixtures/mcp-links-tools.json';
 
 jest.mock('../updateCheck', () => ({ getUpdateInfo: () => null, getCurrentVersion: () => '0.0.0-test', checkForUpdates: () => {} }));
 
@@ -84,9 +85,9 @@ async function connectClient(bridge: Bridge | RelayBridge) {
 describe('mcp-manage-kaption.LIST.2 definitions', () => {
   it('are the canonical ones, verbatim, after every other tool', async () => {
     // The status tools (scheduled-status.MCP), then the channels and communities tools, then export_chat
-    // (chat-export.MCP), follow the manage block.
+    // (chat-export.MCP), then the Kaption Links tools (kaption-links.MCP), follow the manage block.
     const names = TOOLS.map(t => t.name);
-    const tail = channelsCanonical.length + exportChatCanonical.length + 2;
+    const tail = channelsCanonical.length + exportChatCanonical.length + linksCanonical.length + 2;
     expect(names.slice(-tail, -tail + 2)).toEqual(['manage_status', 'list_status_posts']);
     expect(names.slice(-canonical.length - tail, -tail)).toEqual(canonical.map(t => t.name));
     const bridge = new Bridge();
@@ -568,8 +569,8 @@ describe('whatsapp-channels-communities.HUB the channels and communities tools o
 });
 
 describe('chat-export.MCP export_chat on the hub', () => {
-  it('chat-export.MCP.2, MCP.4 — is the pinned kaptionai definition, verbatim (read-only), last', async () => {
-    expect(TOOLS[TOOLS.length - 1].name).toBe('export_chat');
+  it('chat-export.MCP.2, MCP.4 — is the pinned kaptionai definition, verbatim (read-only), before the Links tools', async () => {
+    expect(TOOLS[TOOLS.length - 1 - linksCanonical.length].name).toBe('export_chat');
     const want = (exportChatCanonical as any[])[0];
     const got = getToolsForMCP().find(t => t.name === 'export_chat')!;
     expect({ ...got, inputSchema: withoutClosedObjects(got.inputSchema) }).toEqual(want);
@@ -614,6 +615,98 @@ describe('chat-export.MCP export_chat on the hub', () => {
     const bad: any = await mcp.client.callTool({ name: 'export_chat', arguments: { chat_id: '1@c.us', media: ['gif'] } });
     expect(bad.isError).toBe(true);
     expect(owner).toHaveLength(1);
+    await mcp.client.close();
+  });
+});
+
+const LINK_TOOLS = ['create_tracked_links', 'list_tracked_links', 'get_link_clicks'];
+
+describe('kaption-links.MCP the Kaption Links tools on the hub', () => {
+  it('kaption-links.MCP.10 — are the pinned kaptionai definitions, verbatim (name, title, description, input schema, annotations), last', async () => {
+    expect(TOOLS.slice(-LINK_TOOLS.length).map(t => t.name)).toEqual(linksCanonical.map(t => t.name));
+    expect(LINK_TOOLS).toEqual(linksCanonical.map(t => t.name));
+    // getToolsForMCP() is the form kext's generate-webmcp-tools.mjs reads: exactly the pinned file.
+    const exported = getToolsForMCP();
+    for (const want of linksCanonical as any[]) {
+      expect(exported.find(t => t.name === want.name)).toEqual(want);
+    }
+    const bridge = new Bridge();
+    fakeExtension(bridge, 'sess_owner', { kaption_links: true });
+    const mcp = await connectClient(bridge);
+    const listed = (await mcp.client.listTools()).tools;
+    for (const want of linksCanonical as any[]) {
+      const got = listed.find(t => t.name === want.name)!;
+      expect(got.title).toBe(want.title);
+      expect(got.description).toBe(want.description);
+      expect(got.annotations).toEqual(want.annotations);
+      expect(withoutClosedObjects(got.inputSchema)).toEqual(withoutClosedObjects(want.inputSchema));
+    }
+    await mcp.client.close();
+  });
+
+  it('kaption-links.MCP.1-3 — create writes (not destructive, open world); list and clicks only read', () => {
+    const byName = Object.fromEntries(getToolsForMCP().map(t => [t.name, t]));
+    expect(byName.create_tracked_links.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(byName.list_tracked_links.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(byName.get_link_clicks.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+  });
+
+  it('kaption-links.MCP.10 — the key: only kaption_links true shows them', () => {
+    expect([...visibleManageTools([{ kaption_links: true }])]).toEqual(LINK_TOOLS);
+    expect([...visibleManageTools([{ kaption_links: false, manage_kaption: true, export_chat: true }])]).not.toEqual(expect.arrayContaining(['create_tracked_links']));
+    for (const name of LINK_TOOLS) {
+      expect([...visibleManageTools([{ manage_kaption: true, business_agent: true, plans: true, channels_communities: true, export_chat: true }])]).not.toContain(name);
+      expect([...visibleManageTools([{ kaption_links: false }])]).not.toContain(name);
+    }
+    expect(readManageFeatures({ kaption_links: true, local_send: true })).toEqual({ kaption_links: true });
+    expect(readManageFeatures({ kaption_links: false })).toEqual({ kaption_links: false });
+    expect(readManageFeatures({ kaption_links: 'true' })).toEqual({});
+  });
+
+  it('kaption-links.MCP.10 — hidden when false or absent (older extension); appears with list_changed; forwarded unchanged to the account that said so', async () => {
+    const bridge = new Bridge();
+    const mcp = await connectClient(bridge);
+    const old = fakeExtension(bridge, 'sess_old', { local_send: true, manage_kaption: true, export_chat: true });
+    const off = fakeExtension(bridge, 'sess_off', { kaption_links: false });
+    await flush();
+    const before = await mcp.names();
+    for (const name of LINK_TOOLS) expect(before).not.toContain(name);
+    const hidden: any = await mcp.client.callTool({ name: 'list_tracked_links', arguments: {} });
+    expect(hidden.isError).toBe(true);
+    const changes = mcp.changed.tools;
+    const owner = fakeExtension(bridge, 'sess_owner', { kaption_links: true });
+    await flush();
+    const after = await mcp.names();
+    for (const name of LINK_TOOLS) expect(after).toContain(name);
+    expect(mcp.changed.tools).toBeGreaterThan(changes);
+    const fresh = fakeExtension(bridge, 'sess_other', { manage_kaption: true }); // most recently active
+    const createArgs = { links: [{ url: 'https://shop.example.com/sale', title: 'Black Friday sale', post_id: 'weekly-menu-48', chat_id: '120363000000000001@newsletter' }] };
+    const listArgs = { q: 'sale', limit: 10, cursor: 'c_1' };
+    const clicksArgs = { link: 'https://go.kaptionai.com/Ab12Cd3', granularity: 'hour', from: '2026-11-20', to: '2026-11-21' };
+    for (const [name, args] of [['create_tracked_links', createArgs], ['list_tracked_links', listArgs], ['get_link_clicks', clicksArgs], ['get_link_clicks', {}]] as const) {
+      const res: any = await mcp.client.callTool({ name, arguments: args as any });
+      expect(res.isError).toBeFalsy();
+    }
+    expect(owner).toEqual([
+      { method: 'create_tracked_links', params: createArgs },
+      { method: 'list_tracked_links', params: listArgs },
+      { method: 'get_link_clicks', params: clicksArgs },
+      { method: 'get_link_clicks', params: {} },
+    ]);
+    expect(old).toEqual([]);
+    expect(off).toEqual([]);
+    expect(fresh).toEqual([]);
+    // The pinned schema is enforced before forwarding: 0 or 21 links, a limit over 100, an unknown granularity.
+    for (const [name, args] of [
+      ['create_tracked_links', { links: [] }],
+      ['create_tracked_links', { links: Array.from({ length: 21 }, (_, i) => ({ url: `https://example.com/${i}` })) }],
+      ['list_tracked_links', { limit: 101 }],
+      ['get_link_clicks', { granularity: 'week' }],
+    ] as const) {
+      const bad: any = await mcp.client.callTool({ name, arguments: args as any });
+      expect(bad.isError).toBe(true);
+    }
+    expect(owner).toHaveLength(4);
     await mcp.client.close();
   });
 });

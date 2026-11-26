@@ -14,7 +14,7 @@ jest.mock('../updateCheck', () => ({
   checkForUpdates: () => {},
 }));
 
-const FEATURES = { manage_kaption: true, business_agent: true, plans: true, local_send: true, scheduled_status: true, channels_communities: true, credits_simple: false };
+const FEATURES = { manage_kaption: true, business_agent: true, plans: true, local_send: true, scheduled_status: true, channels_communities: true, credits_simple: false, kaption_links: true };
 
 function account(bridge: Bridge, sessionId: string, phone: string) {
   const calls: Array<{ method: string; params: any }> = [];
@@ -73,6 +73,9 @@ describe('mcp.LOCAL_HUB.4 target_session on every tool that reaches an account',
     ['get_contact_note', { contact_id: '15555550100@c.us' }],
     ['get_kaption_settings', {}],
     ['create_kaption_checkout_link', { plan: 'pro' }],
+    // kaption-links.MCP.10 — the Links tools follow mcp.LOCAL_HUB.4 too.
+    ['list_tracked_links', {}],
+    ['get_link_clicks', { link: 'l_0123456789abcdef' }],
   ])('%s runs on the session asked for, not the last one used', async (name, args) => {
     const { client, a, b } = await hub();
     // The other number is used last, so routing by "most recent" would pick it.

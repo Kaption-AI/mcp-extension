@@ -881,6 +881,71 @@ export const TOOLS: ToolDefinition[] = [
       target_session: z.string().optional().describe("Session ID for multi-account routing"),
     }),
   },
+  // kaption-links.MCP.1, MCP.10 (kaptionai features/links/kaption-links.feature.yaml) — Kaption Links: short links that
+  // count clicks. Listed only while a connected extension said features.kaption_links (manageKaption.ts) and forwarded
+  // to it by name; the account core answers. Verbatim from kaptionai kext/scripts/mcp-links-tools.json; target_session
+  // picks the number (mcp.LOCAL_HUB.4), else the call goes to the account that said kaption_links.
+  {
+    name: "create_tracked_links",
+    description: [
+      "Turn up to 20 web addresses into Kaption short links (go.kaptionai.com/…) that count clicks, so the user can see who opened what they shared. Business and Business Agent plans. Use it before the user posts a link in a channel, a group or Status, or sends it to many people. Each link can have a title (shown only to the user) and, to group clicks by post, the post id and the chat it goes to (a channel id ending in @newsletter, a group id ending in @g.us, or status@broadcast; never a person). Only public http and https addresses can be tracked. Creating the same link again within 10 minutes answers the existing one. This only creates links: nothing is sent, and the short link sends visitors straight to the original address. When the account doesn't have the plan, the answer says which plan adds it and gives the checkout link.",
+      "",
+      "Examples:",
+      "  { links: [{ url: \"https://shop.example.com/sale\", title: \"Black Friday sale\" }] }",
+      "  { links: [{ url: \"https://example.com/menu\", post_id: \"weekly-menu-48\", chat_id: \"120363000000000001@newsletter\" }] }",
+    ].join("\n"),
+    inputSchema: z.object({
+      links: z.array(z.object({
+        url: z.string().describe("The full address, starting with https:// or http://"),
+        title: z.string().optional().describe("A name for the link the user will recognise (at most 120 characters)"),
+        post_id: z.string().optional().describe("Any id the user's post goes by, to group its clicks (at most 128 characters)"),
+        chat_id: z.string().optional().describe("The channel (…@newsletter), group (…@g.us) or status@broadcast the link is posted to"),
+      })).min(1).max(20).describe("The addresses to track (1 to 20)"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
+    }),
+  },
+  // kaption-links.MCP.2, MCP.10
+  {
+    name: "list_tracked_links",
+    description: [
+      "List the user's Kaption short links, newest first, each with its short address, the original address, title, post and chat, when it was made, and its clicks (total, unique visitors, last click). Unique visitors are an estimate. Filter by post_id, chat_id or q (words in the title or the address). Pages: when next_cursor is not null, call again with cursor = next_cursor. Changes nothing.",
+      "",
+      "Examples:",
+      "  { }",
+      "  { q: \"sale\", limit: 10 }",
+      "  { chat_id: \"120363000000000001@newsletter\" }",
+    ].join("\n"),
+    inputSchema: z.object({
+      q: z.string().optional().describe("Words in the title or the original address"),
+      post_id: z.string().optional().describe("Only the links of this post"),
+      chat_id: z.string().optional().describe("Only the links posted to this channel, group or status@broadcast"),
+      limit: z.number().int().min(1).max(100).optional().describe("Links per page (default 20, at most 100)"),
+      cursor: z.string().optional().describe("next_cursor of the previous page"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
+    }),
+  },
+  // kaption-links.MCP.3, MCP.8, MCP.10
+  {
+    name: "get_link_clicks",
+    description: [
+      "Read who clicked the user's Kaption short links. With link (the link id from list_tracked_links, or the short address such as https://go.kaptionai.com/Ab12Cd3): that link's clicks over time (per day, or per hour for the last 30 days), the countries, the sites the clicks came from and the device types. With post_id and/or chat_id: the clicks per post and chat (a channel, a group or Status). With neither: the account's totals and its 10 most clicked links. Link previews made by WhatsApp and other apps are not counted as clicks (bots shows how many were left out). Unique visitors are an estimate. Times are UTC. Business and Business Agent plans; otherwise the answer says which plan adds it. Changes nothing.",
+      "",
+      "Examples:",
+      "  { link: \"https://go.kaptionai.com/Ab12Cd3\" }",
+      "  { link: \"l_0123456789abcdef\", granularity: \"hour\", from: \"2026-11-20\" }",
+      "  { chat_id: \"120363000000000001@newsletter\" }",
+      "  { }",
+    ].join("\n"),
+    inputSchema: z.object({
+      link: z.string().optional().describe("The link id (l_…) or its short address"),
+      post_id: z.string().optional().describe("Clicks of this post's links"),
+      chat_id: z.string().optional().describe("Clicks of the links posted to this channel, group or status@broadcast"),
+      granularity: z.enum(["day", "hour"]).optional().describe("With link: clicks per day (default) or per hour"),
+      from: z.string().optional().describe("Start, as a date or date and time (ISO 8601). Default: the last 30 days (2 days per hour)"),
+      to: z.string().optional().describe("End, as a date or date and time (ISO 8601). Default: now"),
+      target_session: z.string().optional().describe("Session ID for multi-account routing"),
+    }),
+  },
 ];
 
 /**
@@ -965,6 +1030,9 @@ const TOOL_TITLES: Record<string, string> = {
   list_scheduled_channel_posts: "List scheduled channel posts",
   get_community_digest: "Get community digest",
   export_chat: "Export chat",
+  create_tracked_links: "Create tracked links",
+  list_tracked_links: "List tracked links",
+  get_link_clicks: "Get link clicks",
 };
 
 // Safety annotations use OpenAI's review definitions:
@@ -1024,6 +1092,10 @@ const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   list_scheduled_channel_posts: { title: "List scheduled channel posts", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   get_community_digest: { title: "Get community digest", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   export_chat: { title: "Export chat", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  // kaption-links.MCP.1-3 — create writes (not destructive) and reads the web; the two reads change nothing.
+  create_tracked_links: { title: "Create tracked links", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  list_tracked_links: { title: "List tracked links", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  get_link_clicks: { title: "Get link clicks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 };
 
 // Every tool carries its title in annotations.title too (Claude's Connectors Directory reads it there).
@@ -1098,7 +1170,10 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   }
 
   if (schema instanceof z.ZodNumber) {
-    const result: Record<string, unknown> = { type: 'number' };
+    // kaption-links.MCP.10 — .int(), .min(n) and .max(n) are published as integer, minimum and maximum (as the SDK lists them).
+    const result: Record<string, unknown> = { type: schema.isInt ? 'integer' : 'number' };
+    if (schema.minValue !== null) result.minimum = schema.minValue;
+    if (schema.maxValue !== null) result.maximum = schema.maxValue;
     if (schema.description) result.description = schema.description;
     return result;
   }
@@ -1138,6 +1213,7 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
     const result: Record<string, unknown> = { type: 'array', items: zodToJsonSchema(schema.element) };
     if (schema.description) result.description = schema.description;
     // whatsapp-channels-communities.HUB.2 — a .max(n) on an array is published as maxItems.
+    if (schema._def.minLength) result.minItems = schema._def.minLength.value; // kaption-links.MCP.10
     if (schema._def.maxLength) result.maxItems = schema._def.maxLength.value;
     return result;
   }
