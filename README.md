@@ -350,7 +350,7 @@ manage_scheduled_messages { action: "cancel", mode: "local", id: "3f2c…" }
 | `mode` | string | `bot` (default) or `local` |
 | `id` | string | Scheduled message ID (for update/delete/cancel/remove/send_now) |
 | `conversation_id` | string | Chat to send to (for create): a person, or a group with `mode: "local"` |
-| `message` | string | Message text. Bot: max 800 chars, no newlines. Local: up to 2000 chars |
+| `message` | string | Message text. Bot: max 800 chars, no newlines. Local: up to 2000 chars (text up to 20000 when the user turned on long messages) |
 | `datetime` | string | ISO 8601 datetime when the message should be sent |
 | `notification_type` | string | Bot only: `extension`, `whatsapp`, or `automatic` (default) |
 
