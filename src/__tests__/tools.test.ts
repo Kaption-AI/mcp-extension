@@ -3,8 +3,8 @@ import { TOOLS, TOOL_ROUTES, getToolByName, getToolsForMCP, routeToolCall } from
 
 describe('tools', () => {
   describe('TOOLS array', () => {
-    it('should contain all 47 tools', () => {
-      expect(TOOLS).toHaveLength(47);
+    it('should contain all 50 tools', () => {
+      expect(TOOLS).toHaveLength(50);
     });
 
     it('should have unique tool names', () => {
@@ -85,7 +85,7 @@ describe('tools', () => {
   describe('getToolsForMCP', () => {
     it('should return JSON Schema format for all tools', () => {
       const mcpTools = getToolsForMCP();
-      expect(mcpTools).toHaveLength(47);
+      expect(mcpTools).toHaveLength(50);
 
       for (const tool of mcpTools) {
         expect(tool.name).toBeTruthy();
@@ -356,7 +356,7 @@ describe('tools', () => {
           const anyValue = tool.name === 'update_kaption_settings' && key === 'value';
           expect(hasType || hasOneOf || anyValue).toBe(true);
           if (hasType) {
-            expect(['string', 'number', 'boolean', 'object', 'array'].includes(prop.type)).toBe(true);
+            expect(['string', 'number', 'integer', 'boolean', 'object', 'array'].includes(prop.type)).toBe(true);
           }
         }
       }
